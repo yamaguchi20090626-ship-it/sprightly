@@ -1,16 +1,26 @@
-﻿// @ts-nocheck
-import { Stack } from 'expo-router';
+// @ts-nocheck
+import { Stack, Redirect } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
+import { Audio } from 'expo-av';
+import { AuthProvider, useAuth } from '../context/AuthContext';
 import { WordProvider } from '../context/WordContext';
 import { SettingsProvider } from '../context/SettingsContext';
+import AuthScreen from './auth';
 
 SplashScreen.preventAutoHideAsync();
 
-export default function RootLayout() {
+function AppLayout() {
+  const { user, loading } = useAuth();
+
   useEffect(() => {
     SplashScreen.hideAsync();
+    Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
   }, []);
+
+  if (loading) return null;
+
+  if (!user) return <AuthScreen />;
 
   return (
     <WordProvider>
@@ -23,3 +33,10 @@ export default function RootLayout() {
   );
 }
 
+export default function RootLayout() {
+  return (
+    <AuthProvider>
+      <AppLayout />
+    </AuthProvider>
+  );
+}

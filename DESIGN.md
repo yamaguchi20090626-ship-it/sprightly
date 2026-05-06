@@ -1,210 +1,273 @@
-# Sprightly — 実装設計ドキュメント
+# Sprightly — Technical Design Document
 
-> バージョン: 2026-05-02  
-> 対象コード: `src/` 全体（Next.js 16.2.4 App Router / React 19 / TypeScript / Tailwind CSS v4）
+> 対象読者: 実装担当エンジニア。このドキュメントだけで実装・修正・拡張が可能なレベルで記述する。
+> Last updated: 2026-05-06
 
 ---
 
 ## 目次
 
-1. [システム全体像](#1-システム全体像)
-2. [ディレクトリ構成と責務](#2-ディレクトリ構成と責務)
-3. [データモデル](#3-データモデル)
+1. [アーキテクチャ概要](#1-アーキテクチャ概要)
+2. [データモデル](#2-データモデル)
+3. [SRSエンジン](#3-srsエンジン)
 4. [状態管理](#4-状態管理)
-5. [SRSアルゴリズム](#5-srsアルゴリズム)
-6. [外部API・内部API](#6-外部api内部api)
-7. [永続化層](#7-永続化層)
-8. [コンポーネント設計](#8-コンポーネント設計)
-9. [ページ設計](#9-ページ設計)
-10. [スタイリング規則](#10-スタイリング規則)
+5. [外部API仕様](#5-外部api仕様)
+6. [Web実装詳細](#6-web実装詳細)
+7. [モバイル実装詳細](#7-モバイル実装詳細)
+8. [プラットフォーム差異一覧](#8-プラットフォーム差異一覧)
+9. [ストレージ設計](#9-ストレージ設計)
+10. [デプロイ構成](#10-デプロイ構成)
 11. [既知の技術的負債](#11-既知の技術的負債)
-12. [拡張ロードマップ](#12-拡張ロードマップ)
 
 ---
 
-## 1. システム全体像
+## 1. アーキテクチャ概要
 
 ```
-ブラウザ
- ├─ localStorage["sprightly_words"]     → WordEntry[]（全単語・SRS状態）
- └─ localStorage["sprightly_settings"]  → Settings（目標数・フォントサイズ）
-
-Next.js (App Router)
- ├─ /                → redirect to /study
- ├─ /add             → 単語追加（1語 or CSV一括）
- ├─ /study           → SRSフラッシュカード学習
- ├─ /words           → 単語一覧・検索・削除
- ├─ /progress        → 進捗グラフ・統計
- ├─ /settings        → 設定（目標語数・フォントサイズ）
- └─ /api/examples    → Tatoeba CORS プロキシ（Route Handler）
-
-外部API
- ├─ api.dictionaryapi.dev   → 単語定義取得（クライアント直接）
- ├─ tatoeba.org/api_v0      → 例文取得（サーバー経由プロキシ）
- └─ api.mymemory.translated.net → 日本語翻訳（クライアント直接）
+sprightly/
+├── src/                        ← Next.js 16.2.4 (Web / Vercel)
+│   ├── app/                      App Router
+│   │   ├── page.tsx              / → /study redirect
+│   │   ├── study/page.tsx        SRS学習画面
+│   │   ├── add/page.tsx          単語追加
+│   │   ├── words/page.tsx        単語一覧
+│   │   ├── progress/page.tsx     進捗グラフ
+│   │   ├── settings/page.tsx     設定
+│   │   └── api/examples/         Tatoebaプロキシ (Route Handler)
+│   ├── components/               React コンポーネント
+│   ├── context/                  WordContext, SettingsContext
+│   ├── lib/                      srs.ts, api.ts, storage.ts, dailyLimit.ts
+│   └── types/                    word.ts
+└── mobile/                     ← Expo SDK 54 / React Native 0.81 (iOS/Android)
+    ├── app/
+    │   ├── _layout.tsx           Root Stack + Providers
+    │   └── (tabs)/               ファイルベースルーティング (expo-router)
+    │       ├── index.tsx         学習
+    │       ├── add.tsx           単語追加
+    │       ├── words.tsx         単語一覧
+    │       ├── progress.tsx      進捗グラフ
+    │       └── settings.tsx      設定
+    ├── components/
+    ├── context/                  WordContext, SettingsContext (AsyncStorage版)
+    ├── lib/                      srs.ts(同一), api.ts(Tatoeba直接呼出し), dailyLimit.ts(async)
+    └── types/                    word.ts (Web版と完全同一)
 ```
 
-**データフロー（学習セッション）**
+### コード共有戦略
 
-```
-[study/page.tsx]
-  pickNextWord(words, now)  ←  WordContext（全単語）
-       ↓ カードを表示
-  [FlashCard.tsx]
-       ↓ 4段階評価 (again / hard / good / easy)
-  dispatch({ type: 'REVIEW_CARD', id, rating })
-       ↓
-  [WordContext reducer]
-  getSRSCard(word) → reviewCard(card, rating, now) → 次状態
-  WordEntry に srs* フィールドを書き戻す
-       ↓
-  saveWords(words)  →  localStorage
-```
+モノレポパッケージ化せず単純ファイルコピーで管理。規模に対してモノレポ設定のオーバーヘッドが不釣り合いなため。
+
+| ファイル | Web | Mobile | 差異 |
+|---------|-----|--------|------|
+| `types/word.ts` | `src/types/` | `mobile/types/` | なし（バイト単位で同一） |
+| `lib/srs.ts` | `src/lib/` | `mobile/lib/` | なし（バイト単位で同一） |
+| `lib/api.ts` | `src/lib/` | `mobile/lib/` | `fetchExamples` のみ変更（プロキシ→直接） |
+| `lib/dailyLimit.ts` | `src/lib/` | `mobile/lib/` | `localStorage`→`AsyncStorage`、全関数が `async` |
+| `context/WordContext.tsx` | `src/context/` | `mobile/context/` | ストレージ層のみ変更 |
+| `context/SettingsContext.tsx` | `src/context/` | `mobile/context/` | ストレージ層のみ変更 |
 
 ---
 
-## 2. ディレクトリ構成と責務
+## 2. データモデル
 
-```
-src/
-├─ app/
-│   ├─ layout.tsx           ルートレイアウト。Provider 積み上げ場所。
-│   ├─ globals.css          CSS変数定義・Tailwind import。
-│   ├─ page.tsx             / → /study リダイレクト。
-│   ├─ add/page.tsx         WordForm + CsvImport を配置するだけ。
-│   ├─ study/page.tsx       SRSロジック + カード切り替え。
-│   ├─ words/page.tsx       WordList を配置するだけ。
-│   ├─ progress/page.tsx    統計カード + SVG折れ線グラフ。
-│   ├─ settings/page.tsx    goalCount / fontSize 設定UI。
-│   └─ api/
-│       └─ examples/route.ts  GET /api/examples?word=xxx → Tatoeba プロキシ。
-│
-├─ components/
-│   ├─ NavBar.tsx           スティッキーナビ。usePathname でアクティブ判定。
-│   ├─ AppShell.tsx         fontSize Context を div クラスに適用する薄いラッパ。
-│   ├─ WordForm.tsx         1語検索・プレビュー・追加フォーム。
-│   ├─ CsvImport.tsx        CSV一括インポート（直列API呼び出し）。
-│   ├─ FlashCard.tsx        カードフリップ + 4ボタン評価 + 例文取得。
-│   ├─ WordList.tsx         検索・ソート・展開詳細付き単語一覧。
-│   └─ ProgressStats.tsx    目標達成バー + ステータス別横棒グラフ。
-│
-├─ context/
-│   ├─ WordContext.tsx      WordEntry[] の CRUD + REVIEW_CARD アクション。
-│   └─ SettingsContext.tsx  Settings の読み書き。
-│
-├─ lib/
-│   ├─ api.ts               fetchWord（辞書）/ fetchExamples（プロキシ経由）。
-│   ├─ storage.ts           loadWords / saveWords（localStorage ラッパ）。
-│   └─ srs.ts               SRSアルゴリズム純粋関数群。
-│
-├─ types/
-│   └─ word.ts              共通型定義（WordEntry / SRSCard / Rating など）。
-│
-└─ __tests__/
-    └─ srs.test.ts          Vitest 単体テスト（18ケース）。
-```
-
----
-
-## 3. データモデル
-
-### 3.1 `WordEntry`（`src/types/word.ts`）
+### WordEntry（唯一の永続化エンティティ）
 
 ```typescript
-export interface WordEntry {
-  // ── 識別・基本情報 ─────────────────────────────
-  id: string;              // crypto.randomUUID()
-  word: string;            // 正規化済み英単語（API返却値そのまま）
-  phonetic?: string;       // 発音記号。例: "/rɪˈzɪliənt/"
-  meanings: Meaning[];     // 品詞ごとの定義リスト（最大 all partOfSpeech）
+// src/types/word.ts  /  mobile/types/word.ts（同一）
 
-  // ── 表示用ステータス ──────────────────────────
-  status: Status;          // 'new' | 'learning' | 'mastered'
-                           // srsState から自動導出（review → mastered）
+export type Status = 'new' | 'learning' | 'mastered';
 
-  // ── タイムスタンプ ────────────────────────────
-  addedAt: number;         // Date.now()
-  lastStudiedAt?: number;  // 最後にREVIEW_CARDが発火した時刻
-  masteredAt?: number;     // status が初めて 'mastered' になった時刻（progress グラフ用）
-
-  // ── 学習統計 ──────────────────────────────────
-  studyCount: number;      // REVIEW_CARD 発火回数
-  correctCount: number;    // rating が 'good' or 'easy' だった回数
-
-  // ── SRS フィールド（optional: 後方互換）────────
-  srsState?: 'new' | 'learning' | 'review';
-  srsInterval?: number;    // 日数（整数）
-  srsEaseFactor?: number;  // 小数。デフォルト 2.5
-  srsDue?: number;         // Unix ms タイムスタンプ
-  srsStep?: number;        // learning フェーズのステップ index (0-2)
-}
-```
-
-**`Meaning` / `Definition`**
-
-```typescript
 export interface Definition {
   definition: string;
   example?: string;
 }
 
 export interface Meaning {
-  partOfSpeech: string;    // "noun" | "verb" | "adjective" | ...
-  definitions: Definition[]; // API から最大3件に絞る
-  synonyms: string[];      // 最大5件
+  partOfSpeech: string;
+  definitions: Definition[];  // API から最大3件に絞る
+  synonyms: string[];         // API から最大5件に絞る
+}
+
+export interface WordEntry {
+  id: string;           // crypto.randomUUID() / Crypto.randomUUID()
+  word: string;         // API返却値そのまま（dictionaryapi.dev が正規化済み）
+  phonetic?: string;    // 例: /ˈhæpɪ/
+  meanings: Meaning[];
+
+  // SRS state から自動導出: 'review' → 'mastered'
+  status: Status;
+
+  // タイムスタンプ（Unixミリ秒）
+  addedAt: number;
+  lastStudiedAt?: number;
+  masteredAt?: number;      // 初めて 'mastered' になった時刻。以後変更しない
+
+  // 統計
+  studyCount: number;       // REVIEW_CARD のたびに +1
+  correctCount: number;     // rating が 'good' or 'easy' のとき +1
+
+  // SRS フィールド（省略可: getSRSCard が status から移行）
+  srsState?: 'new' | 'learning' | 'review';
+  srsInterval?: number;     // 日数（整数）
+  srsEaseFactor?: number;   // 乗数。範囲: [1.3, ∞)。デフォルト 2.5
+  srsDue?: number;          // 次回レビュー予定時刻（Unixミリ秒）。0 = 即出題
+  srsStep?: number;         // 学習フェーズのステップ番号（0, 1, 2）
+
+  note?: string;            // ユーザーメモ
 }
 ```
 
-**`Status` 遷移ルール**
+### Status 遷移ルール
 
-| SRS `state` | 表示 `status` | 意味 |
-|------------|--------------|------|
-| `'new'` | `'new'` | 一度も学習していない |
-| `'learning'` | `'learning'` | 学習フェーズ中 |
-| `'review'` | `'mastered'` | 卒業・定期復習フェーズ |
+| srsState | status（表示用） |
+|----------|-----------------|
+| `'new'` | `'new'` |
+| `'learning'` | `'learning'` |
+| `'review'` | `'mastered'` |
 
-`srsState` が未設定の既存データは `getSRSCard()` が `status` フィールドから移行する。
+`srsState` が未設定の既存データは `getSRSCard()` が `status` から推定して移行する。
 
-### 3.2 `Settings`（`src/context/SettingsContext.tsx`）
+### SettingsState
 
 ```typescript
-export interface Settings {
-  goalCount: number;        // 習得目標語数。デフォルト 100。最小値 1。
-  fontSize: 'sm' | 'md' | 'lg'; // デフォルト 'md'
+type FontSize = 'sm' | 'md' | 'lg';
+
+interface Settings {
+  goalCount: number;        // デフォルト: 100, 最小値: 1
+  fontSize: FontSize;       // デフォルト: 'md'
+  newCardsPerDay: number;   // デフォルト: 20, 最小値: 1
 }
 ```
 
-localStorage キー: `'sprightly_settings'`
+---
+
+## 3. SRSエンジン
+
+ファイル: `src/lib/srs.ts`（`mobile/lib/srs.ts` と完全同一）  
+テスト: `src/__tests__/srs.test.ts`（Vitest, 決定論的RNGで検証）
+
+### 定数
+
+```typescript
+const MIN_EASE = 1.3;
+const INITIAL_EASE = 2.5;
+const GRADUATING_INTERVAL = 1;   // 日: learningの最終stepから卒業時
+const EASY_INTERVAL = 4;         // 日: easyで即卒業時
+
+const STEPS_MS = [
+  1  * 60 * 1_000,       // step 0: 1分
+  10 * 60 * 1_000,       // step 1: 10分
+  24 * 60 * 60 * 1_000,  // step 2: 1日 → 卒業判定
+];
+```
+
+### 状態遷移図
+
+```
+new ──good/easy──▶ learning ──good(step=2完了)──▶ review
+                      │                               │
+                   again                           again
+                      └──────────(step=0)─────────────┘
+```
+
+### 学習フェーズ（handleLearning）
+
+| rating | 次 state | 次 step | 次 due |
+|--------|---------|---------|--------|
+| again  | learning | 0      | now + STEPS[0]（1分） |
+| hard   | learning | 現状維持 | now + STEPS[step] |
+| good   | learning / review | step+1 / 0 | STEPS[step+1] / daysMs(interval) |
+| easy   | review   | 0      | now + daysMs(4) |
+
+good で step が最終（index 2）を超えた場合:
+```typescript
+const base = card.interval > 0 ? card.interval : GRADUATING_INTERVAL;
+const interval = applyFuzz(base, rng);
+// → state='review', interval=interval, due=now+daysMs(interval)
+```
+
+### レビューフェーズ（handleReview）
+
+| rating | interval | easeFactor | state |
+|--------|----------|------------|-------|
+| again  | 1（固定） | ef − 0.2   | learning, step=0, due=now+STEPS[0] |
+| hard   | interval × 1.2 | ef − 0.15 | review |
+| good   | interval × ef  | 変化なし    | review |
+| easy   | interval × ef × 1.3 | ef + 0.1 | review |
+
+全ケースで `clampEase(MIN_EASE=1.3)` を適用。
+
+### applyFuzz
+
+```typescript
+// ±5% のランダム揺らぎを加える（インターバルをわずかにずらす）
+function applyFuzz(interval: number, rng: () => number = Math.random): number {
+  const factor = 1 + (rng() * 0.1 - 0.05);
+  return Math.max(1, Math.ceil(interval * factor));
+}
+
+const daysMs = (days: number) => Math.round(days * 86_400_000);
+```
+
+テスト時は `rng = () => 0.5`（factor=1.0）を渡して決定論的にする。
+
+### カード選択（pickNextWord）
+
+```typescript
+export function pickNextWord(
+  words: WordEntry[],
+  now: number = Date.now(),
+  opts: { skipNew?: boolean } = {},
+): WordEntry | null
+// 1. due <= now のカードのみ対象
+// 2. 優先順位: 'learning' > 'new' > 'review'
+// 3. 同優先度内は Math.random() でランダム選択
+// opts.skipNew=true で 'new' をスキップ（1日の新規上限到達時）
+```
+
+### getSRSCard（WordEntry → SRSCard）
+
+```typescript
+export function getSRSCard(word: WordEntry): SRSCard {
+  const defaultState =
+    word.srsState ??
+    (word.status === 'mastered' ? 'review' : word.status === 'learning' ? 'learning' : 'new');
+  return {
+    interval: word.srsInterval ?? (word.status === 'mastered' ? 4 : 0),
+    easeFactor: word.srsEaseFactor ?? INITIAL_EASE,
+    due: word.srsDue ?? 0,
+    state: defaultState,
+    step: word.srsStep ?? 0,
+  };
+}
+```
 
 ---
 
 ## 4. 状態管理
 
-### 4.1 `WordContext`
+### WordContext（両プラットフォーム共通のReducer）
 
-**Provider 配置**: `src/app/layout.tsx` の最外層。
+```typescript
+type Action =
+  | { type: 'LOAD_WORDS'; words: WordEntry[] }
+  | { type: 'ADD_WORD'; word: WordEntry }
+  | { type: 'REVIEW_CARD'; id: string; rating: Rating }
+  | { type: 'UPDATE_NOTE'; id: string; note: string }
+  | { type: 'DELETE_WORD'; id: string };
+```
 
-**アクション一覧**
-
-| action.type | payload | 動作 |
-|-------------|---------|------|
-| `LOAD_WORDS` | `words: WordEntry[]` | 初期ロード。localStorage から流し込む。 |
-| `ADD_WORD` | `word: WordEntry` | 末尾に追加。 |
-| `REVIEW_CARD` | `id: string, rating: Rating` | SRS計算 → 全フィールド更新（後述）。 |
-| `DELETE_WORD` | `id: string` | 該当IDを配列から除去。 |
-
-**`REVIEW_CARD` の詳細ロジック**
+#### REVIEW_CARD の処理
 
 ```typescript
 case 'REVIEW_CARD': {
   const now = Date.now();
   return state.map((w) => {
     if (w.id !== action.id) return w;
-    const card = getSRSCard(w);                         // 既存or移行データからSRSCard生成
-    const next = reviewCard(card, action.rating, now);  // 純粋関数で次状態算出
+    const card = getSRSCard(w);
+    const next = reviewCard(card, action.rating, now);
     const isCorrect = action.rating === 'good' || action.rating === 'easy';
-    const newStatus = srsStateToStatus(next.state);     // 'review' → 'mastered' 等
-
+    const newStatus = srsStateToStatus(next.state); // 'review' → 'mastered'
     return {
       ...w,
       status: newStatus,
@@ -222,528 +285,432 @@ case 'REVIEW_CARD': {
 }
 ```
 
-**副作用**: `useEffect([words])` で `saveWords(words)` を呼ぶ。状態変化のたびに全件をlocalStorageに書き込む。
+### SettingsContext
 
-### 4.2 `SettingsContext`
+Actions: `LOAD`, `SET_GOAL`, `SET_FONT_SIZE`, `SET_NEW_CARDS_PER_DAY`
 
-**アクション一覧**
+`SET_GOAL`・`SET_NEW_CARDS_PER_DAY` は `value > 0` のバリデーションあり。不正値は無視（state 変更なし）。
 
-| action.type | payload | 動作 |
-|-------------|---------|------|
-| `LOAD` | `settings: Settings` | 初期ロード。`DEFAULT` とマージ（`{ ...DEFAULT, ...settings }`）。 |
-| `SET_GOAL` | `count: number` | `Math.max(1, count)` で下限保証。 |
-| `SET_FONT_SIZE` | `size: FontSize` | 'sm' \| 'md' \| 'lg'。 |
+### 初期化パターン
+
+**Web（同期）:**
+```typescript
+useEffect(() => {
+  const raw = localStorage.getItem(KEY);
+  if (raw) dispatch({ type: 'LOAD_WORDS', words: JSON.parse(raw) });
+}, []);
+useEffect(() => {
+  localStorage.setItem(KEY, JSON.stringify(words));
+}, [words]);
+```
+
+**Mobile（非同期）:**
+```typescript
+useEffect(() => {
+  AsyncStorage.getItem(STORAGE_KEY).then((raw) => {
+    if (raw) dispatch({ type: 'LOAD_WORDS', words: JSON.parse(raw) });
+  });
+}, []);
+useEffect(() => {
+  AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(words));
+}, [words]);
+```
 
 ---
 
-## 5. SRSアルゴリズム
+## 5. 外部API仕様
 
-実装: `src/lib/srs.ts`。テスト: `src/__tests__/srs.test.ts`（18ケース、全通過）。
+### Datamuse（単語補完）
 
-### 5.1 型定義
-
-```typescript
-export type Rating = 'again' | 'hard' | 'good' | 'easy';
-export type SRSState = 'new' | 'learning' | 'review';
-
-export interface SRSCard {
-  interval: number;    // 日数（整数）。未学習時は 0。
-  easeFactor: number;  // 区間乗数。範囲 [1.3, ∞)。デフォルト 2.5。
-  due: number;         // Unix ms タイムスタンプ。0 = 即出題。
-  state: SRSState;
-  step: number;        // learning フェーズのステップ index (0–2)
-}
+```
+GET https://api.datamuse.com/sug?s=<prefix>&max=8
+Response: [{ word: string, score: number }, ...]
+条件: prefix.trim().length >= 2 のとき呼び出し
+使用値: word のみ抽出（最大8件）
 ```
 
-### 5.2 定数
+### dictionaryapi.dev（英英辞書）
 
-```typescript
-const MIN_EASE = 1.3;
-const INITIAL_EASE = 2.5;
-const GRADUATING_INTERVAL = 1;  // 日数: learning 最終ステップから卒業時
-const EASY_INTERVAL = 4;        // 日数: Easy で即卒業時
-
-const STEPS_MS = [
-  1  * 60 * 1_000,       // Step 0: 1分後
-  10 * 60 * 1_000,       // Step 1: 10分後
-  24 * 60 * 60 * 1_000,  // Step 2: 1日後 → 卒業
-] as const;
+```
+GET https://api.dictionaryapi.dev/api/v2/entries/en/<word>
+Response: DictEntry[]
+使用値:
+  data[0].word
+  data[0].phonetic ?? data[0].phonetics[].text (最初に text があるもの)
+  data[0].meanings[]: partOfSpeech, definitions[:3], synonyms[:5]
+エラー: !res.ok or 例外 → null 返却
 ```
 
-### 5.3 エントリポイント
+### MyMemory（英→日 翻訳）
 
-```typescript
-export function reviewCard(
-  card: SRSCard,
-  rating: Rating,
-  now: number,
-  rng: () => number = Math.random,  // テスト時に固定値を渡せる
-): SRSCard
+```
+GET https://api.mymemory.translated.net/get?q=<text>&langpair=en|ja
+Response: { responseData: { translatedText: string } }
+制限: テキストは 400文字でスライス
+エラー: 例外 → 空文字列返却
+呼び出し元: FlashCard コンポーネント（インライン実装）
 ```
 
-- 入力を**ミュートしない**（`{ ...card, ... }` でコピー）
-- `card.state === 'review'` → `handleReview`、それ以外 → `handleLearning`
+### Tatoeba（例文）
 
-### 5.4 Learningフェーズ
-
-| rating | 動作 |
-|--------|------|
-| `again` | `state='learning', step=0, due=now+STEPS_MS[0]` (1分後) |
-| `hard` | `state='learning', step=現step, due=now+STEPS_MS[現step]` |
-| `good` | `step+1 < 3` → 次ステップへ進む。`step+1 >= 3` → 卒業（後述）。 |
-| `easy` | 即卒業。`interval=applyFuzz(4)`, `state='review'` |
-
-**卒業条件（good on step 2）**:
-```typescript
-const base = card.interval > 0 ? card.interval : GRADUATING_INTERVAL;  // 既存interval or 1日
-const interval = applyFuzz(base, rng);
-return { ...card, state: 'review', step: 0, interval, due: now + daysMs(interval) };
+**Web** — Next.js Route Handler 経由（CORS回避）:
+```
+クライアント → GET /api/examples?word=<word>
+  ↓ src/app/api/examples/route.ts
+外部 → GET https://tatoeba.org/api_v0/search?query=<word>&from=eng
+返却: results[:5].map(r => r.text)（エラー時: []）
 ```
 
-### 5.5 Reviewフェーズ
-
-| rating | interval 計算 | easeFactor 変化 |
-|--------|-------------|----------------|
-| `again` | interval=1（固定）、`state='learning', step=0, due=now+1分` | `-0.2`（下限 1.3）|
-| `hard` | `ceil(interval × 1.2)` | `-0.15`（下限 1.3）|
-| `good` | `ceil(interval × easeFactor)` | 変化なし |
-| `easy` | `ceil(interval × easeFactor × 1.3)` | `+0.1` |
-
-### 5.6 ファズ処理
-
+**Mobile** — 直接呼び出し（React Native は CORS 制限なし）:
 ```typescript
-function applyFuzz(interval: number, rng: () => number): number {
-  const factor = 1 + (rng() * 0.1 - 0.05);  // ±5%
-  return Math.max(1, Math.ceil(interval * factor));
-}
+// mobile/lib/api.ts
+GET https://tatoeba.org/en/api_v0/search?query=<word>&from=eng&to=jpn&limit=5
+返却: (data.results ?? []).slice(0, 3).map(r => r.text)
 ```
-
-- `rng()` デフォルトは `Math.random`
-- `rng()=0.5` のとき factor=1.0（deterministic テスト用）
-- 結果は必ず整数・最小1日
-
-### 5.7 ユーティリティ関数
-
-**`getSRSCard(word: WordEntry): SRSCard`**  
-既存データからSRSCard生成。`srsState` 未設定の場合 `status` フィールドから移行:
-- `status='mastered'` → `srsState='review', srsInterval=4`
-- `status='learning'` → `srsState='learning'`
-- それ以外 → `srsState='new'`
-
-**`pickNextWord(words: WordEntry[], now: number): WordEntry | null`**  
-1. `getSRSCard(w).due <= now` のカードのみ対象
-2. 優先順位: `learning` > `new` > `review`
-3. 同優先度内はランダム選択（`Math.random()`）
-
-**`nextDueMs(words: WordEntry[], now: number): number | null`**  
-`due > now` のカードの中で最小の `due` を返す。なければ `null`。
 
 ---
 
-## 6. 外部API・内部API
+## 6. Web実装詳細
 
-### 6.1 Free Dictionary API（辞書定義取得）
-
-```
-GET https://api.dictionaryapi.dev/api/v2/entries/en/{word}
-```
-
-- **認証**: 不要
-- **呼び出し元**: クライアント直接（`src/lib/api.ts` の `fetchWord`）
-- **レート制限**: 公式明記なし。実装上の制限: CSV一括時は300ms間隔を挿入
-- **レスポンス処理**:
-  - `data[0]` のみ使用
-  - `phonetic`: `entry.phonetic ?? entry.phonetics[].text` の最初
-  - `meanings`: 全 `partOfSpeech` 取得。`definitions` は先頭3件のみ
-  - `synonyms`: 先頭5件のみ
-- **エラー処理**: `!res.ok` または例外 → `null` 返却
-
-### 6.2 Tatoeba API（例文取得） ← サーバープロキシ経由
-
-**内部エンドポイント**: `GET /api/examples?word={word}`  
-**実装**: `src/app/api/examples/route.ts`
+### ルーティング
 
 ```
-外部 URL: https://tatoeba.org/api_v0/search?query={word}&from=eng
+/               → redirect('/study')
+/study          → src/app/study/page.tsx
+/add            → src/app/add/page.tsx
+/words          → src/app/words/page.tsx
+/progress       → src/app/progress/page.tsx
+/settings       → src/app/settings/page.tsx
+/api/examples   → src/app/api/examples/route.ts (GET)
 ```
 
-- **なぜプロキシが必要か**: `tatoeba.org` は `Access-Control-Allow-Origin` を返さないためブラウザからの直接呼び出し不可
-- **レスポンス処理**: `data.results[].text` を最大5件取得
-- **エラー時**: `{ examples: [] }` を返す（例外もキャッチ）
-- **クライアント呼び出し**: `src/lib/api.ts` の `fetchExamples(word)`
-
-### 6.3 MyMemory 翻訳API（日本語訳）
+### StudyPage のロジック
 
 ```
-GET https://api.mymemory.translated.net/get?q={text}&langpair=en|ja
+1. words = useWords()
+2. settings = useSettings()
+3. dailyNewCount = getDailyNewCount()（同期・初回mount時）
+4. skipNew = dailyNewCount >= settings.newCardsPerDay
+5. currentWord = pickNextWord(words, Date.now(), { skipNew })
+6. currentWord が null かつ nextDueMs() が存在:
+     → setInterval(10秒) で tick++ → pickNextWord 再試行
+7. ユーザーが rating 選択:
+     a. dispatch({ type: 'REVIEW_CARD', id, rating })
+     b. wasNew（選択前の srsState='new'）なら incrementDailyNewCount()
+     c. 次のカードを再選択して setCurrent
 ```
 
-- **認証**: 不要（無料枠）
-- **呼び出し元**: クライアント直接（`FlashCard.tsx` 内インライン実装）
-- **入力制限**: 400文字でスライス（`text.slice(0, 400)`）
-- **結果取得**: `data.responseData.translatedText`
-- **エラー処理**: 例外 → `''` 返却
+### FlashCard（Web）
 
----
+**カードフリップ**: CSS のみ（JS 不要）
+```css
+/* 親 */
+perspective: 1000px;
 
-## 7. 永続化層
+/* カード本体 */
+transform-style: preserve-3d;
+transform: rotateY(0deg) / rotateY(180deg);  /* flipped state で切り替え */
 
-### 7.1 localStorage スキーマ
+/* 表・裏 */
+backface-visibility: hidden;
+/* 裏面は初期 rotateY(180deg) */
+```
 
-| キー | 型 | 内容 |
-|------|----|------|
-| `sprightly_words` | `JSON(WordEntry[])` | 全単語データ |
-| `sprightly_settings` | `JSON(Settings)` | アプリ設定 |
-
-### 7.2 `src/lib/storage.ts`
-
+**音声（Web Speech API）:**
 ```typescript
-export function loadWords(): WordEntry[]      // SSR時は[]を返す
-export function saveWords(words: WordEntry[]): void
+window.speechSynthesis.speak(
+  Object.assign(new SpeechSynthesisUtterance(text), { lang: 'en-US' })
+);
 ```
 
-- `typeof window === 'undefined'` チェックでSSR安全
-- `JSON.parse` 失敗時は `[]` を返す
+**評価ボタン色:**
+| ボタン | 背景 | テキスト |
+|--------|------|---------|
+| Again  | red-100 | red-700 |
+| Hard   | orange-100 | orange-700 |
+| Good   | blue-100 | blue-700 |
+| Easy   | emerald-100 | emerald-700 |
 
-### 7.3 書き込みタイミング
-
-WordContext の `useEffect([words])` が words 変化のたびに `saveWords` を呼ぶ。  
-SettingsContext の `useEffect([settings])` が settings 変化のたびに書き込む。
-
-**注意**: 単語数が増えるほど毎回全件書き込みが発生する。現状は局所的な問題ではないが、1000語を超えると顕在化する可能性がある（→ [技術的負債 §11.1](#111-全件書き込みのパフォーマンス)）。
-
----
-
-## 8. コンポーネント設計
-
-全コンポーネントは `'use client'` ディレクティブ付き（localStorageアクセスとReact hooksのため）。
-
-### 8.1 `NavBar`
-
-```
-Props: なし
-Hooks: usePathname()
-```
-
-- `links` 配列でルートとラベルを管理
-- アクティブリンク: `pathname === href` で `bg-sky-600 text-white` を適用
-- sticky + `z-10` でスクロール時も常に表示
-
-### 8.2 `AppShell`
-
-```
-Props: { children: ReactNode }
-Hooks: useSettings()
-```
-
-- `fontClass = { sm: 'text-sm', md: 'text-base', lg: 'text-lg' }` をルート div に適用
-- children 全体のフォントサイズをここで一元制御
-
-### 8.3 `WordForm`
-
-```
-Props: なし
-Hooks: useWords(), useWordDispatch()
-State: input, preview, loading, error, added
-```
-
-**フロー**:
-1. input → Enter or 検索ボタン → `fetchWord(term)` → `preview` セット
-2. 重複チェック: `words.some(w => w.word.toLowerCase() === preview.word.toLowerCase())`
-3. 追加: `ADD_WORD` dispatch。`studyCount=0, correctCount=0, status='new'`
-4. SRS フィールドは追加時に**セットしない**（`getSRSCard` で移行済み扱いが必要な場合は `srsDue=0` がデフォルト）
-
-### 8.4 `CsvImport`
-
-```
-Props: なし
-Hooks: useWords(), useWordDispatch()
-State: status, progress, result, error
-Ref: fileRef（inputリセット用）
-```
-
-**CSV パースルール** (`parseCsv`):
-- `\r?\n` で行分割 → 各行の1列目（`,`で分割した`[0]`）を取得
-- 前後の引用符・空白を除去
-- 空行・ヘッダー行（`/^(word|英単語|english|単語)$/i`）を除外
-- 先頭が英字でなければ除外
-
-**インポートフロー**:
-1. 重複は `skipped`（API呼び出しなし）
-2. 未重複 → `fetchWord` → 成功なら `ADD_WORD`、失敗なら `notFound`
-3. **直列処理**: 各単語の間に `await new Promise(r => setTimeout(r, 300))` を挿入（APIレート制限対策）
-4. 完了後 `fileRef.current.value = ''` でinputリセット
-
-### 8.5 `FlashCard`
-
-```
-Props: { word: WordEntry, onResult: (rating: Rating) => void }
-Hooks: useState x6（flipped, japaneseTexts, loadingJa, tatoebaExamples, loadingTatoeba, tatoebaJaTexts, loadingTatoebaJa）
-```
-
-**カードフリップ実装**:
-```
-perspective: 1000px  → 親 div
-transformStyle: preserve-3d  → 子 div（カード本体）
-transform: rotateY(0deg) / rotateY(180deg)  → state で切り替え
-backfaceVisibility: hidden  → 表・裏それぞれに適用
-```
-
-**評価ボタン**: カード裏面（`flipped=true`）のときのみ表示
-
-| ボタン | 色 | 日本語ラベル |
-|--------|-----|-------------|
-| Again | red-100 / text-red-700 | もう一度 |
-| Hard | orange-100 / text-orange-700 | 難しい |
-| Good | blue-100 / text-blue-700 | 正解 |
-| Easy | emerald-100 / text-emerald-700 | 簡単 |
-
-**評価後リセット**: `handleResult(rating)` で `flipped=false`、全取得済みデータを `null` リセット → `onResult(rating)` 呼び出し
-
-**単語ハイライト** (`highlightWord`):
+**単語ハイライト関数:**
 ```typescript
 function highlightWord(sentence: string, word: string): React.ReactNode {
   const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const parts = sentence.split(new RegExp(`(${escaped})`, 'gi'));
   return parts.map((part, i) =>
     part.toLowerCase() === word.toLowerCase()
-      ? <strong key={i} className="text-amber-500 font-bold not-italic">{part}</strong>
+      ? <strong key={i} className="text-amber-500 font-bold">{part}</strong>
       : part
   );
 }
 ```
 
-### 8.6 `WordList`
+### ProgressPage SVGチャート仕様
 
-```
-Props: なし
-Hooks: useWords(), useWordDispatch()
-State: searchQuery, sortOrder('added'|'az'), expandedId
-```
-
-**フィルタ・ソート** (`useMemo`):
-1. `searchQuery` で `word.toLowerCase().includes(q)` フィルタ
-2. `sortOrder='az'` → `localeCompare`、`'added'` → `reverse()`（追加順の新しい順）
-
-**展開詳細** (`WordDetail` サブコンポーネント):
-- クリックで `expandedId` をトグル（同一IDなら閉じる）
-- phonetic、meanings（全品詞）、辞書例文を表示
-
-### 8.7 `ProgressStats`
-
-```
-Props: なし
-Hooks: useWords(), useSettings()
-```
-
-**目標達成バー**:
-- `achievePct = Math.min(100, Math.round((masteredCount / goalCount) * 100))`
-
-**横棒グラフ**:
-- `maxCount = Math.max(...counts, 1)`（ゼロ除算防止）
-- 各バー幅: `(count / maxCount) * 100%`
-
----
-
-## 9. ページ設計
-
-### 9.1 `/add`
-
-`WordForm` + `CsvImport` の垂直積み（`space-y-8`）。
-
-### 9.2 `/study`
-
-**State**: `current: WordEntry | null`, `sessionCount: number`, `tick: number`
-
-**カード選択ロジック**:
-```
-初期表示: useEffect([words, current]) → current===nullのとき pickNextWord(words, now)
-評価後: handleResult() → pickNextWord(words.filter(not current), now) → setCurrent
-due切れ待機: useEffect([current]) → current===null のとき 10秒ごと tick++ → pickNextWord 再試行
-```
-
-**"no due cards" 画面**:
-- `nextDueMs(words)` で次の due を取得
-- `formatCountdown(ms)`: 60分未満 → `${Math.ceil(ms/60_000)}分後`、以上 → `${Math.ceil(ms/3_600_000)}時間後`
-- 「今すぐ確認」ボタンで手動 `pickNextWord`
-
-**ステータスバー表示**:
-```typescript
-const dueCount = words.filter(w => getSRSCard(w).due <= Date.now()).length;
-```
-
-### 9.3 `/words`
-
-`WordList` のみ。
-
-### 9.4 `/progress`
-
-**SVGグラフ定数**:
 ```typescript
 const PAD = { l: 44, r: 20, t: 16, b: 38 };
-const CW = 476;   // チャート幅
-const CH = 180;   // チャート高さ
-const VW = 540;   // viewBox幅
-const VH = 234;   // viewBox高さ
+const CW = 476; const CH = 180; const VW = 540; const VH = 234;
+// viewBox="0 0 540 234"
 ```
 
-**データ準備**（`useMemo`）:
-1. `masteredAt ?? lastStudiedAt ?? addedAt` で習得タイムスタンプ推定
-2. 昇順ソート → 累積カウント点列生成
-3. 先頭に「最初の習得日 - 1日、count=0」を追加（グラフ原点）
-4. 末尾に「現在時刻、同count」を追加（今日まで線を引く）
+データ準備:
+```
+1. masteredAt でソートした累積点列を作成
+2. 先頭に「最初の日 - 1日、count=0」を追加（グラフ原点）
+3. 末尾に「現在時刻、同count」を追加（今日まで線を引く）
+```
 
-**座標変換**:
-- X軸: `PAD.l + ((ms - xMin) / range) * CW`
-- Y軸: `PAD.t + CH - (count / max) * CH`（上が多）
+座標変換:
+```typescript
+xScale(ms) = PAD.l + ((ms - xMin) / xRange) * CW
+yScale(n)  = PAD.t + CH - (n / max) * CH
+```
 
-**Y軸目盛り**: 0, 25%, 50%, 75%, 100% の5本（重複値は `filter(unique)`）  
-**X軸ラベル**: 最大5点を等間隔サンプリング（`M/D` 形式）
+グリッド: Y軸 0/25/50/75/100% の5本。X軸ラベル最大5点（`M/D` 形式）。
 
-### 9.5 `/settings`
+### NavBar のアクティブ判定
 
-- goalCount: `<input type="number" min=1 max=9999>`
-- fontSize: 3ボタン（小/中/大）、アクティブ = `bg-indigo-600 text-white`
+```typescript
+const isActive = (href: string) =>
+  pathname === href || pathname.startsWith(href + '/');
+// active: 'bg-sky-600 text-white'
+// inactive: 'hover:bg-white/10'
+```
+
+### CsvImport のパースルール
+
+```typescript
+// 1行目: word のみ使用（CSV 1列目）
+// スキップ条件:
+//   - 空行
+//   - /^(word|英単語|english|単語)$/i にマッチするヘッダー行
+//   - /^[a-zA-Z]/ にマッチしない行
+// インポート: 直列処理、各単語間に 300ms 待機（APIレート制限対策）
+```
+
+### スタイリング規則
+
+```css
+/* カラーパレット */
+--bg-app: #1a3357;   /* ページ背景 */
+--bg-nav: #0f2540;   /* ナビ背景 */
+
+/* ステータスバッジ */
+new:       bg-gray-100  text-gray-600
+learning:  bg-yellow-100 text-yellow-700
+mastered:  bg-green-100  text-green-700
+```
+
+最大幅: `max-w-2xl mx-auto px-4` で全ページ共通（672px）。
 
 ---
 
-## 10. スタイリング規則
+## 7. モバイル実装詳細
 
-### 10.1 カラーパレット
+### ナビゲーション構造
 
-```css
-:root {
-  --bg-app: #1a3357;   /* ページ背景（落ち着いた濃紺） */
-  --bg-nav: #0f2540;   /* ナビゲーション背景 */
-}
-body { background-color: var(--bg-app); color: #f1f5f9; }
+```
+app/_layout.tsx        → Stack (headerShown: false)
+  └── (tabs)/_layout.tsx → Tabs（5タブ）
+        ├── index.tsx      学習（graduation-cap アイコン）
+        ├── add.tsx        単語追加（plus-circle）
+        ├── words.tsx      単語一覧（list）
+        ├── progress.tsx   進捗（bar-chart）
+        └── settings.tsx   設定（cog）
 ```
 
-### 10.2 カード・パネル類
+タブバーのスタイル:
+```typescript
+tabBarStyle: { backgroundColor: '#0f172a', borderTopColor: '#1e293b' }
+tabBarActiveTintColor: '#818cf8'
+tabBarInactiveTintColor: '#64748b'
+headerStyle: { backgroundColor: '#0f172a' }
+```
 
-| 用途 | クラス |
-|------|--------|
-| 白カード（明るい要素） | `bg-white border border-gray-200 rounded-xl` |
-| 半透明パネル（ダーク背景上） | `bg-white/10 rounded-xl` |
-| フラッシュカード表 | `bg-white border-gray-200 rounded-2xl` |
-| フラッシュカード裏 | `bg-indigo-50 border-indigo-100 rounded-2xl` |
+### FlashCard アニメーション（Mobile）
 
-### 10.3 ステータスバッジ
+CSS 3D transform 非対応のため opacity 切り替えで実装:
 
 ```typescript
-const statusColor = {
-  new: 'bg-gray-100 text-gray-600',
-  learning: 'bg-yellow-100 text-yellow-700',
-  mastered: 'bg-green-100 text-green-700',
-};
+const flipAnim = useRef(new Animated.Value(0)).current;
+
+const frontOpacity = flipAnim.interpolate({
+  inputRange: [0, 0.5, 1], outputRange: [1, 0, 0],
+});
+const backOpacity = flipAnim.interpolate({
+  inputRange: [0, 0.5, 1], outputRange: [0, 0, 1],
+});
+
+function flip() {
+  Animated.spring(flipAnim, {
+    toValue: flipped ? 0 : 1,
+    useNativeDriver: true,
+  }).start();
+  setFlipped(!flipped);
+}
 ```
 
-### 10.4 フォントサイズ制御
+```tsx
+<Animated.View style={[StyleSheet.absoluteFill, { opacity: frontOpacity }]}>
+  {/* 表面 */}
+</Animated.View>
+<Animated.View style={[StyleSheet.absoluteFill, { opacity: backOpacity }]}>
+  {/* 裏面 */}
+</Animated.View>
+```
 
-`AppShell` の div に `text-sm` / `text-base` / `text-lg` を付与。  
-個別コンポーネント内で `text-xs`, `text-sm` 等を使う場合は AppShell クラスからの相対値となる点に注意。
+### expo-speech（音声）
 
-### 10.5 最大幅制約
+```typescript
+import * as Speech from 'expo-speech';
+Speech.speak(word, { language: 'en-US' });
+```
 
-`<main className="max-w-2xl mx-auto px-4 py-8">` で全ページ最大幅 672px。  
-NavBar も同じ `max-w-2xl mx-auto` で揃える。
+### expo-crypto（UUID）
+
+```typescript
+import * as Crypto from 'expo-crypto';
+id: Crypto.randomUUID(),
+```
+
+### react-native-svg（進捗グラフ）
+
+```typescript
+import { Svg, Line, Polyline, Circle, Text as SvgText, Path } from 'react-native-svg';
+
+const SCREEN_W = Dimensions.get('window').width - 32;
+const PAD = { l: 40, r: 10, t: 10, b: 30 };
+const CW = SCREEN_W - PAD.l - PAD.r;
+const CH = 140;
+// 座標計算ロジックは Web 版と同一
+```
+
+### DailyLimit の非同期パターン（Mobile）
+
+```typescript
+// index.tsx
+const [dailyNewCount, setDailyNewCount] = useState(0);
+
+useEffect(() => {
+  getDailyNewCount().then(setDailyNewCount);
+}, []);
+
+async function handleResult(rating: Rating) {
+  const wasNew = getSRSCard(currentWord).state === 'new';
+  dispatch({ type: 'REVIEW_CARD', id: currentWord.id, rating });
+  if (wasNew) {
+    const next = await incrementDailyNewCount();
+    setDailyNewCount(next);
+  }
+  // 次のカードを選択...
+}
+```
+
+### iOS キーボード対応
+
+```tsx
+<KeyboardAvoidingView
+  behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+>
+  <TextInput ... />
+</KeyboardAvoidingView>
+```
+
+---
+
+## 8. プラットフォーム差異一覧
+
+| 機能 | Web | Mobile |
+|------|-----|--------|
+| ストレージ | `localStorage`（同期） | `AsyncStorage`（非同期） |
+| TTS | `window.speechSynthesis` | `expo-speech` |
+| UUID生成 | `crypto.randomUUID()` | `Crypto.randomUUID()`（expo-crypto） |
+| SVGグラフ | `<svg>` JSX | `react-native-svg` |
+| カードフリップ | CSS rotateY | Animated.spring + opacity補間 |
+| Tatoeba呼出し | `/api/examples` Route Handler 経由 | 直接呼び出し（CORS不要） |
+| ナビゲーション | Next.js App Router | expo-router |
+| スタイリング | Tailwind CSS v4 | StyleSheet.create / inline |
+| テキスト入力 | `<input>` | `<TextInput>` |
+| タップ操作 | `<button>` | `<TouchableOpacity>` / `<Pressable>` |
+| 削除確認 | なし（即削除） | `Alert.alert()` |
+| dailyLimit 戻り値 | `number`（同期） | `Promise<number>`（非同期） |
+
+---
+
+## 9. ストレージ設計
+
+### キー一覧
+
+| キー | 内容 | 型 |
+|-----|------|----|
+| `sprightly_words` | 単語リスト全体 | `WordEntry[]`（JSON） |
+| `sprightly_settings` | ユーザー設定 | `Settings`（JSON） |
+| `sprightly_daily` | 今日の新規カード数 | `{ date: string; newCount: number }`（JSON） |
+
+### `sprightly_daily` のフォーマット
+
+```typescript
+function todayStr(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+// date が今日と異なれば newCount=0 を返す（日付をまたいだ自動リセット）
+```
+
+---
+
+## 10. デプロイ構成
+
+### Web（Vercel）
+
+- リポジトリ: `github.com/yamaguchi20090626-ship-it/sprightly_eitango`
+- ブランチ: `main`
+- ビルドコマンド: `npm run build`（Vercel 自動検出）
+- 環境変数: なし
+
+**重要制約**: Next.js 16 は `tsconfig.json` の `exclude` 設定に関わらず、プロジェクト直下の全 `.ts`/`.tsx` を TypeScript チェッカーに渡す。`mobile/` 配下の全ファイルに `// @ts-nocheck` が必要（`expo-router` 等が未インストールのため）。
+
+git のリモートは2つ設定されている:
+```bash
+origin  → https://github.com/yamaguchi20090626-ship-it/sprightly.git
+eitango → https://github.com/yamaguchi20090626-ship-it/sprightly_eitango.git
+```
+Vercel へのデプロイは `eitango` へのプッシュが必要:
+```bash
+git push eitango master:main
+```
+
+### Mobile（Expo）
+
+- 開発: `cd mobile && npx expo start --tunnel`（iOS 実機はトンネル経由が安定）
+- ビルド: EAS Build（`eas build --platform ios`）
+- 設定ファイル: `mobile/app.json`
+  - iOS Bundle ID: `com.yourname.sprightly`（App Store 申請時に変更要）
+  - Android Package: `com.yourname.sprightly`
 
 ---
 
 ## 11. 既知の技術的負債
 
-### 11.1 全件書き込みのパフォーマンス
+### 全件書き込みのパフォーマンス
 
-`useEffect([words])` が words 変化のたびに `JSON.stringify(全件)` を localStorage に書く。  
-単語数 < 500語 では問題ないが、超えると 1回の評価で数十ms のブロッキングが発生しうる。
+`useEffect([words])` が words 変化のたびに全件を JSON シリアライズしてストレージに書く。500語超で顕在化する可能性がある。対策: 差分検知して変化があるときのみ書き込む。
 
-**対策案**: `useRef` で前回スナップショットを保持し、差分がある場合だけ書き込む。
-
-### 11.2 `study/page.tsx` の `eslint-disable` コメント
+### `study/page.tsx` の exhaustive-deps 抑制
 
 ```typescript
-useEffect(() => {
-  // ...
-}, [tick]); // eslint-disable-line react-hooks/exhaustive-deps
+useEffect(() => { ... }, [tick]); // eslint-disable-line react-hooks/exhaustive-deps
 ```
 
-`words` を deps に含めると無限ループするため一時的に外している。  
-正しい修正: `tick` と `words` を組み合わせた `useCallback` か `useRef` でwords最新値を参照する。
+`words` を deps に含めると無限ループするため一時回避。正しい修正は `useRef` で最新 words を参照するか `useCallback` でラップする。
 
-### 11.3 MyMemory 翻訳のレート制限
+### MyMemory 無料枠の上限
 
-無料枠は 1日 5,000文字。ヘビーユーザーが多数の例文を翻訳すると制限に達する。エラー時は空文字を返すだけでユーザーに通知しない。
+1日5,000文字。多数の例文翻訳でヒットする。エラー時は空文字列を返すだけでユーザーへの通知がない。
 
-### 11.4 SRS フィールドが `ADD_WORD` 時に未設定
+### CsvImport のキャンセル不可
 
-新規追加時に `srsDue` を設定しないため、`getSRSCard(w).due = 0`（即出題対象）となる。  
-これは意図どおりだが、ドキュメント化されていない暗黙の挙動。
+300ms × N 語の直列処理にキャンセル手段がない。50語 = 最低15秒の待機が発生する。
 
-### 11.5 `progress/page.tsx` のマスタリングタイムスタンプ推定
+### Mobile の `// @ts-nocheck`
 
-`masteredAt` が未設定の既存データは `lastStudiedAt ?? addedAt` で代替する。  
-これはグラフの日付を誤った方向にずらす可能性がある（実際の習得日と乖離）。
-
-### 11.6 CsvImport の直列API呼び出し
-
-300ms間隔 × N語で大きなCSVほど時間がかかる。50語 = 最低15秒。キャンセル手段がない。
-
----
-
-## 12. 拡張ロードマップ
-
-### 優先度 HIGH
-
-#### A. SRS統計の可視化
-`/progress` ページに SRS固有の統計を追加する。
-
-**追加すべき指標**:
-- 本日の期限カード数（`getSRSCard(w).due <= startOfDay`）
-- 学習フェーズ別内訳（learning/step別）
-- 平均 easeFactor（モチベーション指標）
-
-#### B. 単語インポート時のSRSフィールド初期化
-
-`ADD_WORD` の `word` オブジェクトに以下を追加:
-```typescript
-srsState: 'new',
-srsInterval: 0,
-srsEaseFactor: 2.5,
-srsDue: 0,       // 即出題
-srsStep: 0,
-```
-`getSRSCard` の移行ロジックへの依存をなくし、新規追加は常に明示的な初期値を持つ。
-
-### 優先度 MEDIUM
-
-#### C. 学習セッション上限
-
-1セッションで出題する新規カード枚数を設定可能にする（例: 新規は1日20枚まで）。  
-`Settings` に `newCardsPerDay: number` を追加。`pickNextWord` が `'new'` を選ぶとき、当日すでに出題済みの新規カード数をカウントして制限。
-
-#### D. データエクスポート / バックアップ
-
-`words: WordEntry[]` を JSON または CSV にエクスポートするボタンを `/settings` に追加。  
-実装: `URL.createObjectURL(new Blob([JSON.stringify(words)], {type:'application/json'}))`
-
-#### E. オフライン対応 / PWA
-
-`next.config.ts` に `next-pwa` を追加。Service Worker でページキャッシュ。  
-外部APIへの fetch は失敗してもUIが壊れない設計にすること（現状は `try/catch` で `null` 返却済み）。
-
-### 優先度 LOW
-
-#### F. クラウド同期
-
-現状 localStorage のみ。バックエンドを追加する場合:
-1. `loadWords()` / `saveWords()` を抽象化したアダプタインタフェースに差し替える
-2. 楽観的更新 + バックグラウンド同期で UX を維持する
-
-#### G. 音声読み上げ
-
-`window.speechSynthesis.speak(new SpeechSynthesisUtterance(word))` で実装可能。  
-`FlashCard` のフロント面に「発音を聞く」ボタンを追加。
-
-#### H. カードの手動難易度調整
-
-単語一覧から特定単語の `easeFactor` や `srsDue` を直接編集できる UI。
+モバイルファイル全体に型チェックが効かない状態。Vercel の TypeScript スキャン回避のための暫定措置。根本解決策: Next.js プロジェクトルートから `mobile/` を物理的に分離する（別ディレクトリ配置または submodule 化）。

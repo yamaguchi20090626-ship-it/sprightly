@@ -1,10 +1,10 @@
 import type { Metadata } from 'next';
 import { Geist } from 'next/font/google';
 import './globals.css';
+import { AuthProvider } from '@/context/AuthContext';
 import { WordProvider } from '@/context/WordContext';
 import { SettingsProvider } from '@/context/SettingsContext';
-import AppShell from '@/components/AppShell';
-import NavBar from '@/components/NavBar';
+import ClientLayout from '@/components/ClientLayout';
 
 const geist = Geist({ subsets: ['latin'], variable: '--font-geist-sans' });
 
@@ -22,14 +22,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ja" className={`${geist.variable} h-full`}>
       <body className="min-h-full antialiased">
-        <WordProvider>
-          <SettingsProvider>
-            <AppShell>
-              <NavBar />
-              <main className="max-w-2xl mx-auto px-4 py-8">{children}</main>
-            </AppShell>
-          </SettingsProvider>
-        </WordProvider>
+        <AuthProvider>
+          <WordProvider>
+            <SettingsProvider>
+              <ClientLayout>{children}</ClientLayout>
+            </SettingsProvider>
+          </WordProvider>
+        </AuthProvider>
       </body>
     </html>
   );
