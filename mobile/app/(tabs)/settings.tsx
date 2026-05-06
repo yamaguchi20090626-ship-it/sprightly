@@ -1,6 +1,7 @@
 ﻿// @ts-nocheck
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { useSettings, useSettingsDispatch, type FontSize } from '../../context/SettingsContext';
+import { useAuth } from '../../context/AuthContext';
 import { useState, useEffect } from 'react';
 import { getDailyNewCount } from '../../lib/dailyLimit';
 
@@ -13,6 +14,7 @@ const fontSizes: Array<{ value: FontSize; label: string }> = [
 export default function SettingsScreen() {
   const settings = useSettings();
   const dispatch = useSettingsDispatch();
+  const { signOut } = useAuth();
   const [todayNewCount, setTodayNewCount] = useState(0);
 
   useEffect(() => {
@@ -95,6 +97,10 @@ export default function SettingsScreen() {
           </Text>
         </Text>
       </View>
+
+      <TouchableOpacity style={styles.logoutBtn} onPress={signOut}>
+        <Text style={styles.logoutText}>ログアウト</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -125,5 +131,7 @@ const styles = StyleSheet.create({
   fontSizeBtnActive: { backgroundColor: '#4f46e5' },
   fontSizeBtnText: { fontSize: 14, fontWeight: '600', color: '#1f2937' },
   fontSizeBtnTextActive: { color: '#fff' },
+  logoutBtn: { backgroundColor: '#dc2626', borderRadius: 14, padding: 16, alignItems: 'center' },
+  logoutText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 });
 

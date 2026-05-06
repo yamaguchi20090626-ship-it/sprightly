@@ -1,6 +1,8 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useSettings, useSettingsDispatch, type FontSize } from '@/context/SettingsContext';
+import { useAuth } from '@/context/AuthContext';
 import { getDailyNewCount } from '@/lib/dailyLimit';
 
 const fontSizes: Array<{ value: FontSize; label: string }> = [
@@ -12,7 +14,14 @@ const fontSizes: Array<{ value: FontSize; label: string }> = [
 export default function SettingsPage() {
   const settings = useSettings();
   const dispatch = useSettingsDispatch();
+  const { signOut } = useAuth();
+  const router = useRouter();
   const todayNewCount = getDailyNewCount();
+
+  async function handleSignOut() {
+    await signOut();
+    router.push('/auth');
+  }
 
   return (
     <div className="space-y-6">
@@ -80,6 +89,13 @@ export default function SettingsPage() {
         </div>
         <p className="text-xs text-gray-600">現在: <span className="font-semibold text-gray-900">{fontSizes.find(f => f.value === settings.fontSize)?.label}</span></p>
       </div>
+
+      <button
+        onClick={handleSignOut}
+        className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3 rounded-xl transition-colors"
+      >
+        ログアウト
+      </button>
     </div>
   );
 }
