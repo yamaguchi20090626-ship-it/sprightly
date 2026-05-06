@@ -24,6 +24,9 @@ async function translateToJapanese(text: string): Promise<string> {
     if (!translated || translated.startsWith('MYMEMORY WARNING') || translated.startsWith('QUERY LENGTH')) {
       return '翻訳を取得できませんでした';
     }
+    if (!/[぀-ゟ゠-ヿ一-龯]/.test(translated)) {
+      return '翻訳を取得できませんでした';
+    }
     return translated;
   } catch {
     return '翻訳を取得できませんでした';
