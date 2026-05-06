@@ -8,15 +8,12 @@ async function translateToJapanese(text: string): Promise<string> {
   try {
     const q = text.slice(0, 400);
     const res = await fetch(
-      `https://api.mymemory.translated.net/get?q=${encodeURIComponent(q)}&langpair=en|ja`
+      `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=ja&dt=t&q=${encodeURIComponent(q)}`
     );
     if (!res.ok) return '翻訳を取得できませんでした';
     const data = await res.json();
-    const translated = data?.responseData?.translatedText ?? '';
-    if (!translated || translated.startsWith('MYMEMORY WARNING') || translated.startsWith('QUERY LENGTH')) {
-      return '翻訳を取得できませんでした';
-    }
-    if (!/[぀-ゟ゠-ヿ一-龯]/.test(translated)) {
+    const translated = data[0]?.map((item: unknown[]) => item[0]).join('') ?? '';
+    if (!translated || !/[぀-ゟ゠-ヿ一-龯]/.test(translated)) {
       return '翻訳を取得できませんでした';
     }
     return translated;
