@@ -12,6 +12,24 @@ import {
 import { useWords, useWordDispatch } from '../../context/WordContext';
 import type { Status, WordEntry } from '../../types/word';
 
+async function translateToJapanese(text: string): Promise<string> {
+  try {
+    const q = text.slice(0, 400);
+    const res = await fetch(
+      `https://api.mymemory.translated.net/get?q=${encodeURIComponent(q)}&langpair=en|ja`
+    );
+    if (!res.ok) return '翻訳を取得できませんでした';
+    const data = await res.json();
+    const translated = data?.responseData?.translatedText ?? '';
+    if (!translated || translated.startsWith('MYMEMORY WARNING') || translated.startsWith('QUERY LENGTH')) {
+      return '翻訳を取得できませんでした';
+    }
+    return translated;
+  } catch {
+    return '翻訳を取得できませんでした';
+  }
+}
+
 const statusLabel: Record<Status, string> = {
   new: '未学習',
   learning: '学習中',
@@ -28,6 +46,22 @@ function WordDetail({ word }: { word: WordEntry }) {
   const dispatch = useWordDispatch();
   const [note, setNote] = useState(word.note ?? '');
   const [editing, setEditing] = useState(false);
+  const [japaneseTexts, setJapaneseTexts] = useState<string[] | null>(null);
+  const [loadingJa, setLoadingJa] = useState(false);
+
+  async function handleToggleJapanese() {
+    if (japaneseTexts !== null) { setJapaneseTexts(null); return; }
+    setLoadingJa(true);
+    const results = await Promise.all(
+      word.meanings.map((m) =>
+        m.definitions[0]?.definition
+          ? translateToJapanese(m.definitions[0].definition)
+          : Promise.resolve('')
+      )
+    );
+    setJapaneseTexts(results);
+    setLoadingJa(false);
+  }
 
   function saveNote() {
     dispatch({ type: 'UPDATE_NOTE', id: word.id, note: note.trim() });
@@ -46,8 +80,16 @@ function WordDetail({ word }: { word: WordEntry }) {
           {m.definitions[0]?.example ? (
             <Text style={styles.exampleText}>"{m.definitions[0].example}"</Text>
           ) : null}
+          {japaneseTexts !== null && (
+            <Text style={styles.jaText}>{japaneseTexts[i] || '翻訳を取得できませんでした'}</Text>
+          )}
         </View>
       ))}
+      <TouchableOpacity onPress={handleToggleJapanese} disabled={loadingJa}>
+        <Text style={styles.jaToggleBtn}>
+          {loadingJa ? '翻訳中…' : japaneseTexts !== null ? '日本語を非表示' : '日本語で意味を確認'}
+        </Text>
+      </TouchableOpacity>
 
       <View style={styles.noteSection}>
         <View style={styles.noteHeader}>
@@ -207,6 +249,8 @@ const styles = StyleSheet.create({
   posText: { fontSize: 11, fontWeight: '600', color: '#4338ca' },
   definitionText: { fontSize: 14, color: '#1f2937', lineHeight: 20 },
   exampleText: { fontSize: 12, color: '#3b82f6', fontStyle: 'italic', lineHeight: 18 },
+  jaText: { fontSize: 12, color: '#4338ca', borderLeftWidth: 2, borderLeftColor: '#a5b4fc', paddingLeft: 8, lineHeight: 18, marginTop: 2 },
+  jaToggleBtn: { fontSize: 12, color: '#6366f1', textDecorationLine: 'underline', marginTop: 4 },
   noteSection: { paddingTop: 8, borderTopWidth: 1, borderTopColor: '#f1f5f9', gap: 4 },
   noteHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   noteLabel: { fontSize: 12, fontWeight: '600', color: '#4b5563' },

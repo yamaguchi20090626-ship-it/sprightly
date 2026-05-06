@@ -11,10 +11,15 @@ async function translateToJapanese(text: string): Promise<string> {
     const res = await fetch(
       `https://api.mymemory.translated.net/get?q=${encodeURIComponent(q)}&langpair=en|ja`
     );
+    if (!res.ok) return '翻訳を取得できませんでした';
     const data = await res.json();
-    return data?.responseData?.translatedText ?? '';
+    const translated = data?.responseData?.translatedText ?? '';
+    if (!translated || translated.startsWith('MYMEMORY WARNING') || translated.startsWith('QUERY LENGTH')) {
+      return '翻訳を取得できませんでした';
+    }
+    return translated;
   } catch {
-    return '';
+    return '翻訳を取得できませんでした';
   }
 }
 
@@ -170,9 +175,9 @@ export default function FlashCard({ word, onResult }: Props) {
                       &ldquo;{m.definitions[0].example}&rdquo;
                     </p>
                   )}
-                  {japaneseTexts?.[i] && (
+                  {japaneseTexts !== null && (
                     <p className="text-indigo-700 text-sm leading-relaxed border-l-2 border-indigo-300 pl-3">
-                      {japaneseTexts[i]}
+                      {japaneseTexts[i] || '翻訳を取得できませんでした'}
                     </p>
                   )}
                 </div>
