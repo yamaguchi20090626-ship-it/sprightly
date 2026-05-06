@@ -92,7 +92,7 @@ export default function SettingsPage() {
 
       <button
         onClick={handleSignOut}
-        className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3 rounded-xl transition-colors"
+        className="mx-auto block text-sm text-gray-400 hover:text-gray-600 transition-colors py-1"
       >
         ログアウト
       </button>

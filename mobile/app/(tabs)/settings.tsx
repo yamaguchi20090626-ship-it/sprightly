@@ -131,7 +131,7 @@ const styles = StyleSheet.create({
   fontSizeBtnActive: { backgroundColor: '#4f46e5' },
   fontSizeBtnText: { fontSize: 14, fontWeight: '600', color: '#1f2937' },
   fontSizeBtnTextActive: { color: '#fff' },
-  logoutBtn: { backgroundColor: '#dc2626', borderRadius: 14, padding: 16, alignItems: 'center' },
-  logoutText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  logoutBtn: { alignItems: 'center', paddingVertical: 8 },
+  logoutText: { color: '#64748b', fontSize: 13 },
 });
 
