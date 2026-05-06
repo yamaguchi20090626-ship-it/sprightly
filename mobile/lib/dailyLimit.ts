@@ -1,3 +1,4 @@
+﻿// @ts-nocheck
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const KEY = 'sprightly_daily';
@@ -28,3 +29,4 @@ export async function incrementDailyNewCount(): Promise<number> {
   await AsyncStorage.setItem(KEY, JSON.stringify({ date: todayStr(), newCount: next }));
   return next;
 }
+

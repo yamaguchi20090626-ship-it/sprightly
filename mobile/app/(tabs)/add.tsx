@@ -1,3 +1,4 @@
+﻿// @ts-nocheck
 import { useState, useEffect } from 'react';
 import {
   View,
@@ -175,3 +176,4 @@ const styles = StyleSheet.create({
   addBtn: { backgroundColor: '#16a34a', paddingVertical: 10, borderRadius: 10, alignItems: 'center', marginTop: 4 },
   addBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
 });
+

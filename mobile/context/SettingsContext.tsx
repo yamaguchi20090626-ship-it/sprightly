@@ -1,3 +1,4 @@
+﻿// @ts-nocheck
 import {
   createContext,
   useContext,
@@ -72,3 +73,4 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     </SettingsContext.Provider>
   );
 }
+

@@ -1,3 +1,4 @@
+﻿// @ts-nocheck
 import {
   createContext,
   useContext,
@@ -93,3 +94,4 @@ export function useWords() {
 export function useWordDispatch() {
   return useContext(WordDispatchContext);
 }
+

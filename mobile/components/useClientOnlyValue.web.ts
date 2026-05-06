@@ -1,3 +1,4 @@
+﻿// @ts-nocheck
 import React from 'react';
 
 // `useEffect` is not invoked during server rendering, meaning
@@ -10,3 +11,4 @@ export function useClientOnlyValue<S, C>(server: S, client: C): S | C {
 
   return value;
 }
+

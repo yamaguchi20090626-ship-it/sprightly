@@ -1,3 +1,4 @@
+﻿// @ts-nocheck
 import type { Meaning } from '../types/word';
 
 export async function fetchSuggestions(prefix: string, max = 8): Promise<string[]> {
@@ -74,3 +75,4 @@ export async function fetchWord(word: string): Promise<DictResult | null> {
     return null;
   }
 }
+

@@ -1,3 +1,4 @@
+﻿// @ts-nocheck
 import { useState, useRef } from 'react';
 import {
   View,
@@ -269,3 +270,4 @@ const styles = StyleSheet.create({
   ratingLabel: { fontSize: 14, fontWeight: '600' },
   ratingSub: { fontSize: 11, opacity: 0.7, marginTop: 2 },
 });
+

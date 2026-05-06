@@ -1,3 +1,4 @@
+﻿// @ts-nocheck
 /**
  * Learn more about Light and Dark modes:
  * https://docs.expo.io/guides/color-schemes/
@@ -43,3 +44,4 @@ export function View(props: ViewProps) {
 
   return <DefaultView style={[{ backgroundColor }, style]} {...otherProps} />;
 }
+

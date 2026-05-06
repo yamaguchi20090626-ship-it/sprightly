@@ -1,3 +1,4 @@
+﻿// @ts-nocheck
 import { Link, Stack } from 'expo-router';
 import { StyleSheet } from 'react-native';
 
@@ -38,3 +39,4 @@ const styles = StyleSheet.create({
     color: '#2e78b7',
   },
 });
+

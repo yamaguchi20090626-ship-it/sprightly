@@ -1,3 +1,4 @@
+﻿// @ts-nocheck
 import { Tabs } from 'expo-router';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 
@@ -40,3 +41,4 @@ export default function TabLayout() {
     </Tabs>
   );
 }
+

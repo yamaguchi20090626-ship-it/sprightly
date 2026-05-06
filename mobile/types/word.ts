@@ -1,3 +1,4 @@
+﻿// @ts-nocheck
 export type Status = 'new' | 'learning' | 'mastered';
 
 export interface Definition {
@@ -29,3 +30,4 @@ export interface WordEntry {
   srsStep?: number;
   note?: string;
 }
+

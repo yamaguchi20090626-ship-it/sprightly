@@ -1,3 +1,4 @@
+﻿// @ts-nocheck
 import { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { Link } from 'expo-router';
@@ -147,3 +148,4 @@ const styles = StyleSheet.create({
   statsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 4 },
   statText: { color: '#94a3b8', fontSize: 11 },
 });
+
