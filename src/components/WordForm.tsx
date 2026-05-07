@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { fetchWord, fetchSuggestions, type DictResult } from '@/lib/api';
 import { useWords, useWordDispatch } from '@/context/WordContext';
+import { getDailyAddCount, incrementDailyAddCount, DAILY_ADD_LIMIT } from '@/lib/dailyLimit';
 
 export default function WordForm() {
   const [input, setInput] = useState('');
@@ -12,6 +13,7 @@ export default function WordForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [added, setAdded] = useState(false);
+  const [dailyAddCount, setDailyAddCount] = useState(() => getDailyAddCount());
 
   const words = useWords();
   const dispatch = useWordDispatch();
@@ -69,6 +71,10 @@ export default function WordForm() {
 
   function handleAdd() {
     if (!preview) return;
+    if (dailyAddCount >= DAILY_ADD_LIMIT) {
+      setError(`本日の追加上限（${DAILY_ADD_LIMIT}語）に達しました。明日また追加できます。`);
+      return;
+    }
     const exists = words.some(
       (w) => w.word.toLowerCase() === preview.word.toLowerCase()
     );
@@ -91,11 +97,15 @@ export default function WordForm() {
       },
     });
 
+    const next = incrementDailyAddCount();
+    setDailyAddCount(next);
     setAdded(true);
     setInput('');
     setPreview(null);
     setError('');
   }
+
+  const remaining = DAILY_ADD_LIMIT - dailyAddCount;
 
   return (
     <div className="space-y-4">
@@ -178,12 +188,18 @@ export default function WordForm() {
             </div>
           ))}
 
-          <button
-            onClick={handleAdd}
-            className="w-full bg-green-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors mt-2"
-          >
-            追加する
-          </button>
+          <div className="flex items-center justify-between mt-2 gap-2">
+            <button
+              onClick={handleAdd}
+              disabled={remaining <= 0}
+              className="flex-1 bg-green-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              追加する
+            </button>
+            <span className={`text-xs shrink-0 ${remaining <= 3 ? 'text-amber-500 font-semibold' : 'text-gray-400'}`}>
+              本日残り {remaining} 語
+            </span>
+          </div>
         </div>
       )}
     </div>

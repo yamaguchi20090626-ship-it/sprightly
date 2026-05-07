@@ -203,9 +203,18 @@ export default function FlashCard({ word, onResult }: Props) {
                   {tatoebaExamples.length > 0 ? (
                     tatoebaExamples.map((ex, i) => (
                       <div key={i} className="space-y-1">
-                        <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-1.5 leading-relaxed italic">
-                          &ldquo;{highlightWord(ex, word.word)}&rdquo;
-                        </p>
+                        <div className="flex items-start gap-2">
+                          <p className="flex-1 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-1.5 leading-relaxed italic">
+                            &ldquo;{highlightWord(ex, word.word)}&rdquo;
+                          </p>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); speak(ex); }}
+                            className="shrink-0 mt-1 p-1.5 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-600 transition-colors"
+                            aria-label="読み上げ"
+                          >
+                            <SpeakerIcon />
+                          </button>
+                        </div>
                         {tatoebaJaTexts?.[i] && (
                           <p className="text-xs text-amber-700 pl-3 border-l-2 border-amber-300 leading-relaxed">
                             {tatoebaJaTexts[i]}

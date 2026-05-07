@@ -14,6 +14,7 @@ import {
 import * as Crypto from 'expo-crypto';
 import { fetchWord, fetchSuggestions, type DictResult } from '../../lib/api';
 import { useWords, useWordDispatch } from '../../context/WordContext';
+import { getDailyAddCount, incrementDailyAddCount, DAILY_ADD_LIMIT } from '../../lib/dailyLimit';
 
 export default function AddScreen() {
   const [input, setInput] = useState('');
@@ -23,9 +24,14 @@ export default function AddScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [added, setAdded] = useState(false);
+  const [dailyAddCount, setDailyAddCount] = useState(0);
 
   const words = useWords();
   const dispatch = useWordDispatch();
+
+  useEffect(() => {
+    getDailyAddCount().then(setDailyAddCount);
+  }, []);
 
   useEffect(() => {
     if (input.trim().length < 2) {
@@ -59,8 +65,12 @@ export default function AddScreen() {
     setPreview(result);
   }
 
-  function handleAdd() {
+  async function handleAdd() {
     if (!preview) return;
+    if (dailyAddCount >= DAILY_ADD_LIMIT) {
+      setError(`本日の追加上限（${DAILY_ADD_LIMIT}語）に達しました。明日また追加できます。`);
+      return;
+    }
     const exists = words.some((w) => w.word.toLowerCase() === preview.word.toLowerCase());
     if (exists) { setError('この単語はすでに追加されています'); return; }
     dispatch({
@@ -76,6 +86,8 @@ export default function AddScreen() {
         correctCount: 0,
       },
     });
+    const next = await incrementDailyAddCount();
+    setDailyAddCount(next);
     setAdded(true);
     setInput('');
     setPreview(null);
@@ -139,9 +151,18 @@ export default function AddScreen() {
                 )}
               </View>
             ))}
-            <TouchableOpacity onPress={handleAdd} style={styles.addBtn}>
-              <Text style={styles.addBtnText}>追加する</Text>
-            </TouchableOpacity>
+            <View style={styles.addRow}>
+              <TouchableOpacity
+                onPress={handleAdd}
+                style={[styles.addBtn, dailyAddCount >= DAILY_ADD_LIMIT && styles.addBtnDisabled]}
+                disabled={dailyAddCount >= DAILY_ADD_LIMIT}
+              >
+                <Text style={styles.addBtnText}>追加する</Text>
+              </TouchableOpacity>
+              <Text style={[styles.remainText, (DAILY_ADD_LIMIT - dailyAddCount) <= 3 && styles.remainTextWarn]}>
+                本日残り {DAILY_ADD_LIMIT - dailyAddCount} 語
+              </Text>
+            </View>
           </View>
         )}
       </ScrollView>
@@ -173,7 +194,11 @@ const styles = StyleSheet.create({
   posText: { fontSize: 11, fontWeight: '600', color: '#a5b4fc' },
   definitionText: { fontSize: 14, color: '#e2e8f0', lineHeight: 20 },
   exampleText: { fontSize: 12, color: '#94a3b8', fontStyle: 'italic', lineHeight: 18 },
-  addBtn: { backgroundColor: '#16a34a', paddingVertical: 10, borderRadius: 10, alignItems: 'center', marginTop: 4 },
+  addRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },
+  addBtn: { flex: 1, backgroundColor: '#16a34a', paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
+  addBtnDisabled: { opacity: 0.5 },
   addBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  remainText: { fontSize: 12, color: '#94a3b8' },
+  remainTextWarn: { color: '#f59e0b', fontWeight: '600' },
 });
 

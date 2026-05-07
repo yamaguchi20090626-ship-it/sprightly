@@ -162,7 +162,12 @@ export default function FlashCard({ word, onResult }: Props) {
                 {tatoebaExamples.length > 0 ? (
                   tatoebaExamples.map((ex, i) => (
                     <View key={i} style={styles.tatoebaItem}>
-                      <Text style={styles.tatoebaText}>"{ex}"</Text>
+                      <View style={styles.tatoebaRow}>
+                        <Text style={[styles.tatoebaText, { flex: 1 }]}>"{ex}"</Text>
+                        <TouchableOpacity onPress={() => speak(ex)} style={styles.speakerBtnSmall}>
+                          <Text style={styles.speakerIconSmall}>🔊</Text>
+                        </TouchableOpacity>
+                      </View>
                       {tatoebaJaTexts?.[i] ? (
                         <Text style={styles.tatoebaJaText}>{tatoebaJaTexts[i]}</Text>
                       ) : null}
@@ -268,6 +273,9 @@ const styles = StyleSheet.create({
   tatoebaBox: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#c7d2fe' },
   tatoebaLabel: { fontSize: 12, fontWeight: '600', color: '#d97706', marginBottom: 8 },
   tatoebaItem: { marginBottom: 8 },
+  tatoebaRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  speakerBtnSmall: { padding: 6, backgroundColor: '#fef3c7', borderRadius: 20, marginTop: 2 },
+  speakerIconSmall: { fontSize: 14 },
   tatoebaText: { fontSize: 14, color: '#92400e', backgroundColor: '#fef3c7', borderRadius: 6, padding: 10, fontStyle: 'italic', lineHeight: 20 },
   tatoebaJaText: { fontSize: 12, color: '#b45309', paddingLeft: 10, borderLeftWidth: 2, borderLeftColor: '#fcd34d', marginTop: 4, lineHeight: 18 },
   tatoebaEmpty: { fontSize: 12, color: '#d97706' },
