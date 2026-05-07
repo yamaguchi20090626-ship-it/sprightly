@@ -4,7 +4,20 @@ import { useState, useMemo } from 'react';
 import { useWords, useWordDispatch } from '@/context/WordContext';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
-import type { Status, WordEntry } from '@/types/word';
+import type { Status, WordEntry, Meaning } from '@/types/word';
+
+const POS_PRIORITY: Record<string, number> = {
+  verb: 0, noun: 1, adjective: 2, adverb: 3,
+  pronoun: 4, preposition: 5, conjunction: 6, interjection: 7, exclamation: 8,
+};
+
+function sortMeanings(meanings: Meaning[]): Meaning[] {
+  return [...meanings].sort((a, b) => {
+    const defDiff = b.definitions.length - a.definitions.length;
+    if (defDiff !== 0) return defDiff;
+    return (POS_PRIORITY[a.partOfSpeech] ?? 99) - (POS_PRIORITY[b.partOfSpeech] ?? 99);
+  });
+}
 
 async function translateToJapanese(text: string): Promise<string> {
   try {
@@ -96,7 +109,7 @@ function WordDetail({ word }: { word: WordEntry }) {
         <p className="text-gray-500 text-xs">{word.phonetic}</p>
       )}
 
-      {word.meanings.map((m, i) => (
+      {sortMeanings(word.meanings).map((m, i) => (
         <div key={i} className="space-y-1">
           <span className="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold px-2 py-0.5 rounded">
             {m.partOfSpeech}
@@ -206,7 +219,7 @@ export default function WordList() {
   const words = useWords();
   const dispatch = useWordDispatch();
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortOrder, setSortOrder] = useState<'added' | 'az'>('added');
+  const [sortOrder, setSortOrder] = useState<'added' | 'az' | 'status'>('added');
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
@@ -215,8 +228,11 @@ export default function WordList() {
       ? words.filter((w) => w.word.toLowerCase().includes(q))
       : [...words];
 
+    const statusPriority: Record<Status, number> = { mastered: 0, learning: 1, new: 2 };
     if (sortOrder === 'az') {
       result.sort((a, b) => a.word.localeCompare(b.word));
+    } else if (sortOrder === 'status') {
+      result.sort((a, b) => statusPriority[a.status] - statusPriority[b.status]);
     } else {
       result.reverse();
     }
@@ -247,14 +263,14 @@ export default function WordList() {
           className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white text-gray-900 placeholder-gray-500"
         />
         <button
-          onClick={() => setSortOrder((s) => (s === 'added' ? 'az' : 'added'))}
+          onClick={() => setSortOrder((s) => s === 'added' ? 'az' : s === 'az' ? 'status' : 'added')}
           className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors shrink-0 border ${
-            sortOrder === 'az'
+            sortOrder !== 'added'
               ? 'bg-indigo-600 text-white border-indigo-600'
               : 'bg-white/10 text-white border-white/30 hover:bg-white/20'
           }`}
         >
-          {sortOrder === 'az' ? 'A→Z' : '追加順'}
+          {sortOrder === 'az' ? 'A→Z' : sortOrder === 'status' ? '習得度' : '追加順'}
         </button>
       </div>
 

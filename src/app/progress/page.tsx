@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 import { useWords } from '@/context/WordContext';
+import { useSettings } from '@/context/SettingsContext';
 
 // SVG layout constants
 const PAD = { l: 44, r: 20, t: 16, b: 38 };
@@ -19,8 +20,10 @@ interface Pt { ms: number; count: number }
 
 export default function ProgressPage() {
   const words = useWords();
+  const { goalCount } = useSettings();
 
   const masteredCount = words.filter((w) => w.status === 'mastered').length;
+  const achievePct = Math.min(100, Math.round((masteredCount / goalCount) * 100));
   const studyTotal = words.reduce((s, w) => s + w.studyCount, 0);
   const correctTotal = words.reduce((s, w) => s + w.correctCount, 0);
   const correctRate = studyTotal > 0 ? Math.round((correctTotal / studyTotal) * 100) : 0;
@@ -101,6 +104,23 @@ export default function ProgressPage() {
             <p className="text-xs text-slate-300 mt-1">{label}</p>
           </div>
         ))}
+      </div>
+
+      {/* Goal achievement */}
+      <div className="bg-white/10 rounded-xl p-5 space-y-2">
+        <div className="flex justify-between items-center">
+          <span className="text-sm font-semibold text-white">目標達成率</span>
+          <span className="text-sm font-bold text-green-400">{achievePct}%</span>
+        </div>
+        <div className="h-3 bg-white/10 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-green-400 rounded-full transition-all duration-500"
+            style={{ width: `${achievePct}%` }}
+          />
+        </div>
+        <p className="text-xs text-slate-300 text-right">
+          {masteredCount} / {goalCount} 語（目標）
+        </p>
       </div>
 
       {/* Line chart */}

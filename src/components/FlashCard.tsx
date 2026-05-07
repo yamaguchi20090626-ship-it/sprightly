@@ -1,9 +1,25 @@
 'use client';
 
 import { useState } from 'react';
-import type { WordEntry } from '@/types/word';
+import type { WordEntry, Meaning } from '@/types/word';
 import { fetchExamples } from '@/lib/api';
 import type { Rating } from '@/lib/srs';
+import { useWordDispatch } from '@/context/WordContext';
+import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/lib/supabase';
+
+const POS_PRIORITY: Record<string, number> = {
+  verb: 0, noun: 1, adjective: 2, adverb: 3,
+  pronoun: 4, preposition: 5, conjunction: 6, interjection: 7, exclamation: 8,
+};
+
+function sortMeanings(meanings: Meaning[]): Meaning[] {
+  return [...meanings].sort((a, b) => {
+    const defDiff = b.definitions.length - a.definitions.length;
+    if (defDiff !== 0) return defDiff;
+    return (POS_PRIORITY[a.partOfSpeech] ?? 99) - (POS_PRIORITY[b.partOfSpeech] ?? 99);
+  });
+}
 
 async function translateToJapanese(text: string): Promise<string> {
   try {
@@ -60,6 +76,8 @@ interface Props {
 }
 
 export default function FlashCard({ word, onResult }: Props) {
+  const dispatch = useWordDispatch();
+  const { user } = useAuth();
   const [flipped, setFlipped] = useState(false);
   const [japaneseTexts, setJapaneseTexts] = useState<string[] | null>(null);
   const [loadingJa, setLoadingJa] = useState(false);
@@ -67,6 +85,36 @@ export default function FlashCard({ word, onResult }: Props) {
   const [loadingTatoeba, setLoadingTatoeba] = useState(false);
   const [tatoebaJaTexts, setTatoebaJaTexts] = useState<string[] | null>(null);
   const [loadingTatoebaJa, setLoadingTatoebaJa] = useState(false);
+  const [editingNote, setEditingNote] = useState(false);
+  const [noteText, setNoteText] = useState(word.note ?? '');
+  const [noteImages, setNoteImages] = useState<string[]>(word.noteImages ?? []);
+  const [uploadingImage, setUploadingImage] = useState(false);
+
+  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    setUploadingImage(true);
+    const ext = file.name.split('.').pop() ?? 'jpg';
+    const path = `${user.id}/${word.id}/${Date.now()}.${ext}`;
+    const { data } = await supabase.storage.from('note-images').upload(path, file);
+    if (data) {
+      const { data: { publicUrl } } = supabase.storage.from('note-images').getPublicUrl(path);
+      setNoteImages((prev) => [...prev, publicUrl]);
+    }
+    setUploadingImage(false);
+    e.target.value = '';
+  }
+
+  function saveNote() {
+    dispatch({ type: 'UPDATE_NOTE', id: word.id, note: noteText.trim(), noteImages });
+    setEditingNote(false);
+  }
+
+  function cancelNote() {
+    setNoteText(word.note ?? '');
+    setNoteImages(word.noteImages ?? []);
+    setEditingNote(false);
+  }
 
   async function handleToggleJapanese(e: React.MouseEvent) {
     e.stopPropagation();
@@ -117,6 +165,7 @@ export default function FlashCard({ word, onResult }: Props) {
     setJapaneseTexts(null);
     setTatoebaExamples(null);
     setTatoebaJaTexts(null);
+    setEditingNote(false);
     onResult(rating);
   }
 
@@ -161,7 +210,7 @@ export default function FlashCard({ word, onResult }: Props) {
             style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
           >
             <div className="space-y-5">
-              {word.meanings.map((m, i) => (
+              {sortMeanings(word.meanings).map((m, i) => (
                 <div key={i} className="space-y-2">
                   <span className="inline-block bg-indigo-200 text-indigo-800 text-xs font-semibold px-2 py-0.5 rounded">
                     {m.partOfSpeech}
@@ -183,19 +232,75 @@ export default function FlashCard({ word, onResult }: Props) {
                 </div>
               ))}
 
-              {(word.note || (word.noteImages && word.noteImages.length > 0)) && (
-                <div className="pt-3 border-t border-indigo-200">
-                  <p className="text-xs font-semibold text-indigo-600 mb-1">メモ</p>
-                  {word.note && <p className="text-sm text-gray-800 leading-relaxed">{word.note}</p>}
-                  {word.noteImages && word.noteImages.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {word.noteImages.map((url, i) => (
-                        <img key={i} src={url} alt="" className="max-h-40 rounded-lg object-contain" />
-                      ))}
-                    </div>
+              <div className="pt-3 border-t border-indigo-200">
+                <div className="flex items-center justify-between mb-1.5">
+                  <p className="text-xs font-semibold text-indigo-600">メモ</p>
+                  {!editingNote && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setEditingNote(true); }}
+                      className="text-xs text-indigo-500 hover:text-indigo-700 font-medium transition-colors"
+                    >
+                      {word.note || noteImages.length > 0 ? '編集' : '+ 追加'}
+                    </button>
                   )}
                 </div>
-              )}
+                {editingNote ? (
+                  <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
+                    <textarea
+                      value={noteText}
+                      onChange={(e) => setNoteText(e.target.value)}
+                      rows={2}
+                      placeholder="覚え方、語源、例など…"
+                      className="w-full border border-indigo-300 rounded-lg px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none bg-white"
+                    />
+                    {noteImages.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {noteImages.map((url, i) => (
+                          <div key={i} className="relative">
+                            <img src={url} alt="" className="w-16 h-16 object-cover rounded-lg" />
+                            <button
+                              onClick={() => setNoteImages((prev) => prev.filter((_, j) => j !== i))}
+                              className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 text-xs flex items-center justify-center leading-none"
+                            >×</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <label className={`inline-block text-xs text-indigo-600 underline cursor-pointer ${uploadingImage ? 'opacity-50 pointer-events-none' : ''}`}>
+                      {uploadingImage ? 'アップロード中…' : '+ 画像を追加'}
+                      <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={uploadingImage} />
+                    </label>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={saveNote}
+                        className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg hover:bg-indigo-700 font-medium transition-colors"
+                      >
+                        保存
+                      </button>
+                      <button
+                        onClick={cancelNote}
+                        className="text-xs text-gray-600 hover:text-gray-800 px-3 py-1.5 transition-colors"
+                      >
+                        キャンセル
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {word.note
+                      ? <p className="text-sm text-gray-800 leading-relaxed">{word.note}</p>
+                      : <p className="text-xs text-gray-400 italic">なし</p>
+                    }
+                    {noteImages.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {noteImages.map((url, i) => (
+                          <img key={i} src={url} alt="" className="max-h-32 rounded-lg object-contain" />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
 
               {tatoebaExamples !== null && (
                 <div className="pt-3 border-t border-indigo-200 space-y-2">
