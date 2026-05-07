@@ -14,6 +14,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useWords, useWordDispatch } from '../../context/WordContext';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
+import { useSubscription } from '../../context/SubscriptionContext';
 import type { Status, WordEntry } from '../../types/word';
 
 async function translateToJapanese(text: string): Promise<string> {
@@ -49,6 +50,7 @@ const statusColor: Record<Status, { bg: string; text: string }> = {
 function WordDetail({ word }: { word: WordEntry }) {
   const dispatch = useWordDispatch();
   const { user } = useAuth();
+  const { isPremium, setShowPaywall } = useSubscription();
   const [note, setNote] = useState(word.note ?? '');
   const [editing, setEditing] = useState(false);
   const [noteImages, setNoteImages] = useState<string[]>(word.noteImages ?? []);
@@ -71,6 +73,7 @@ function WordDetail({ word }: { word: WordEntry }) {
   }
 
   async function handlePickImage() {
+    if (!isPremium) { setShowPaywall(true); return; }
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) { Alert.alert('許可が必要です', '写真ライブラリへのアクセスを許可してください。'); return; }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
@@ -154,7 +157,9 @@ function WordDetail({ word }: { word: WordEntry }) {
               </View>
             )}
             <TouchableOpacity onPress={handlePickImage} disabled={uploadingImage}>
-              <Text style={styles.addImageBtn}>{uploadingImage ? 'アップロード中…' : '+ 画像を追加'}</Text>
+              <Text style={styles.addImageBtn}>
+                {uploadingImage ? 'アップロード中…' : isPremium ? '+ 画像を追加' : '🔒 画像を追加 (プレミアム)'}
+              </Text>
             </TouchableOpacity>
             <View style={styles.noteActions}>
               <TouchableOpacity onPress={saveNote} style={styles.saveBtnSmall}>

@@ -10,10 +10,11 @@ import {
   Pressable,
 } from 'react-native';
 import * as Speech from 'expo-speech';
-import { Image } from 'react-native';
+import { Image, Alert } from 'react-native';
 import type { WordEntry } from '../types/word';
 import { fetchExamples } from '../lib/api';
 import type { Rating } from '../lib/srs';
+import { useSubscription } from '../context/SubscriptionContext';
 
 async function translateToJapanese(text: string): Promise<string> {
   try {
@@ -43,6 +44,7 @@ interface Props {
 }
 
 export default function FlashCard({ word, onResult }: Props) {
+  const { isPremium, setShowPaywall } = useSubscription();
   const [flipped, setFlipped] = useState(false);
   const [japaneseTexts, setJapaneseTexts] = useState<string[] | null>(null);
   const [loadingJa, setLoadingJa] = useState(false);
@@ -164,8 +166,14 @@ export default function FlashCard({ word, onResult }: Props) {
                     <View key={i} style={styles.tatoebaItem}>
                       <View style={styles.tatoebaRow}>
                         <Text style={[styles.tatoebaText, { flex: 1 }]}>"{ex}"</Text>
-                        <TouchableOpacity onPress={() => speak(ex)} style={styles.speakerBtnSmall}>
-                          <Text style={styles.speakerIconSmall}>🔊</Text>
+                        <TouchableOpacity
+                          onPress={() => {
+                            if (!isPremium) { setShowPaywall(true); return; }
+                            speak(ex);
+                          }}
+                          style={[styles.speakerBtnSmall, !isPremium && styles.speakerBtnLocked]}
+                        >
+                          <Text style={styles.speakerIconSmall}>{isPremium ? '🔊' : '🔒'}</Text>
                         </TouchableOpacity>
                       </View>
                       {tatoebaJaTexts?.[i] ? (
@@ -275,6 +283,7 @@ const styles = StyleSheet.create({
   tatoebaItem: { marginBottom: 8 },
   tatoebaRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   speakerBtnSmall: { padding: 6, backgroundColor: '#fef3c7', borderRadius: 20, marginTop: 2 },
+  speakerBtnLocked: { backgroundColor: '#e2e8f0' },
   speakerIconSmall: { fontSize: 14 },
   tatoebaText: { fontSize: 14, color: '#92400e', backgroundColor: '#fef3c7', borderRadius: 6, padding: 10, fontStyle: 'italic', lineHeight: 20 },
   tatoebaJaText: { fontSize: 12, color: '#b45309', paddingLeft: 10, borderLeftWidth: 2, borderLeftColor: '#fcd34d', marginTop: 4, lineHeight: 18 },

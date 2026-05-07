@@ -6,6 +6,8 @@ import { Audio } from 'expo-av';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { WordProvider } from '../context/WordContext';
 import { SettingsProvider } from '../context/SettingsContext';
+import { SubscriptionProvider } from '../context/SubscriptionContext';
+import Paywall from '../components/Paywall';
 import AuthScreen from './auth';
 
 SplashScreen.preventAutoHideAsync();
@@ -25,9 +27,12 @@ function AppLayout() {
   return (
     <WordProvider>
       <SettingsProvider>
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="(tabs)" />
-        </Stack>
+        <SubscriptionProvider>
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="(tabs)" />
+          </Stack>
+          <Paywall />
+        </SubscriptionProvider>
       </SettingsProvider>
     </WordProvider>
   );

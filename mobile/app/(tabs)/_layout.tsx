@@ -1,10 +1,7 @@
 ﻿// @ts-nocheck
 import { Tabs } from 'expo-router';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
-
-function Icon(props: { name: React.ComponentProps<typeof FontAwesome>['name']; color: string }) {
-  return <FontAwesome size={22} {...props} />;
-}
+import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 
 export default function TabLayout() {
   return (
@@ -20,23 +17,38 @@ export default function TabLayout() {
     >
       <Tabs.Screen
         name="index"
-        options={{ title: '学習', tabBarIcon: ({ color }) => <Icon name="graduation-cap" color={color} /> }}
+        options={{
+          title: '学習',
+          tabBarIcon: ({ color }) => <MaterialCommunityIcons name="book-edit-outline" size={24} color={color} />,
+        }}
       />
       <Tabs.Screen
         name="add"
-        options={{ title: '追加', tabBarIcon: ({ color }) => <Icon name="plus-circle" color={color} /> }}
+        options={{
+          title: '追加',
+          tabBarIcon: ({ color }) => <Ionicons name="add-circle-outline" size={24} color={color} />,
+        }}
       />
       <Tabs.Screen
         name="words"
-        options={{ title: '一覧', tabBarIcon: ({ color }) => <Icon name="list" color={color} /> }}
+        options={{
+          title: '一覧',
+          tabBarIcon: ({ color }) => <Ionicons name="list-outline" size={24} color={color} />,
+        }}
       />
       <Tabs.Screen
         name="progress"
-        options={{ title: '進捗', tabBarIcon: ({ color }) => <Icon name="bar-chart" color={color} /> }}
+        options={{
+          title: '進捗',
+          tabBarIcon: ({ color }) => <Ionicons name="trending-up-outline" size={24} color={color} />,
+        }}
       />
       <Tabs.Screen
         name="settings"
-        options={{ title: '設定', tabBarIcon: ({ color }) => <Icon name="cog" color={color} /> }}
+        options={{
+          title: '設定',
+          tabBarIcon: ({ color }) => <Ionicons name="settings-outline" size={24} color={color} />,
+        }}
       />
     </Tabs>
   );
