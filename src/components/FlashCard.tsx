@@ -190,6 +190,20 @@ export default function FlashCard({ word, onResult }: Props) {
             className="absolute inset-0 bg-white border border-gray-200 rounded-2xl shadow-md flex flex-col items-center justify-center p-8"
             style={{ backfaceVisibility: 'hidden' }}
           >
+            <div className="absolute top-3 right-4 flex items-center gap-1.5">
+              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                word.status === 'mastered'
+                  ? 'bg-green-100 text-green-700'
+                  : word.status === 'learning'
+                  ? 'bg-yellow-100 text-yellow-700'
+                  : 'bg-blue-100 text-blue-600'
+              }`}>
+                {word.status === 'mastered' ? '習得済み' : word.status === 'learning' ? '学習中' : 'New'}
+              </span>
+              {word.studyCount > 0 && (
+                <span className="text-xs text-gray-400">{word.studyCount}回</span>
+              )}
+            </div>
             <p className="text-4xl font-bold text-gray-900">{word.word}</p>
             {word.phonetic && (
               <p className="text-gray-500 mt-3 text-lg">{word.phonetic}</p>
