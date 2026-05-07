@@ -25,6 +25,7 @@ export function toRow(word: WordEntry, userId: string) {
     srs_due: word.srsDue ?? null,
     srs_step: word.srsStep ?? null,
     note: word.note ?? null,
+    note_images: word.noteImages ?? [],
   };
 }
 
@@ -46,5 +47,6 @@ export function fromRow(row: Record<string, unknown>): WordEntry {
     srsDue: (row.srs_due as number | null) ?? undefined,
     srsStep: (row.srs_step as number | null) ?? undefined,
     note: (row.note as string | null) ?? undefined,
+    noteImages: (row.note_images as string[] | null) ?? [],
   };
 }

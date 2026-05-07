@@ -2,6 +2,8 @@
 
 import { useState, useMemo } from 'react';
 import { useWords, useWordDispatch } from '@/context/WordContext';
+import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/lib/supabase';
 import type { Status, WordEntry } from '@/types/word';
 
 async function translateToJapanese(text: string): Promise<string> {
@@ -36,8 +38,11 @@ const statusColor: Record<Status, string> = {
 
 function WordDetail({ word }: { word: WordEntry }) {
   const dispatch = useWordDispatch();
+  const { user } = useAuth();
   const [note, setNote] = useState(word.note ?? '');
   const [editing, setEditing] = useState(false);
+  const [noteImages, setNoteImages] = useState<string[]>(word.noteImages ?? []);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [japaneseTexts, setJapaneseTexts] = useState<string[] | null>(null);
   const [loadingJa, setLoadingJa] = useState(false);
 
@@ -55,13 +60,33 @@ function WordDetail({ word }: { word: WordEntry }) {
     setLoadingJa(false);
   }
 
+  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    setUploadingImage(true);
+    const ext = file.name.split('.').pop() ?? 'jpg';
+    const path = `${user.id}/${word.id}/${Date.now()}.${ext}`;
+    const { data } = await supabase.storage.from('note-images').upload(path, file);
+    if (data) {
+      const { data: { publicUrl } } = supabase.storage.from('note-images').getPublicUrl(path);
+      setNoteImages((prev) => [...prev, publicUrl]);
+    }
+    setUploadingImage(false);
+    e.target.value = '';
+  }
+
+  function removeImage(url: string) {
+    setNoteImages((prev) => prev.filter((u) => u !== url));
+  }
+
   function saveNote() {
-    dispatch({ type: 'UPDATE_NOTE', id: word.id, note: note.trim() });
+    dispatch({ type: 'UPDATE_NOTE', id: word.id, note: note.trim(), noteImages });
     setEditing(false);
   }
 
   function cancelEdit() {
     setNote(word.note ?? '');
+    setNoteImages(word.noteImages ?? []);
     setEditing(false);
   }
 
@@ -109,7 +134,7 @@ function WordDetail({ word }: { word: WordEntry }) {
               onClick={() => setEditing(true)}
               className="text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors"
             >
-              {word.note ? '編集' : '+ 追加'}
+              {word.note || noteImages.length > 0 ? '編集' : '+ 追加'}
             </button>
           )}
         </div>
@@ -123,6 +148,23 @@ function WordDetail({ word }: { word: WordEntry }) {
               placeholder="覚え方、語源、例など…"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
             />
+            {noteImages.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {noteImages.map((url, i) => (
+                  <div key={i} className="relative">
+                    <img src={url} alt="" className="w-16 h-16 object-cover rounded-lg" />
+                    <button
+                      onClick={() => removeImage(url)}
+                      className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 text-xs flex items-center justify-center leading-none"
+                    >×</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <label className={`inline-block text-xs text-indigo-600 underline cursor-pointer ${uploadingImage ? 'opacity-50 pointer-events-none' : ''}`}>
+              {uploadingImage ? 'アップロード中…' : '+ 画像を追加'}
+              <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={uploadingImage} />
+            </label>
             <div className="flex gap-2">
               <button
                 onClick={saveNote}
@@ -139,12 +181,21 @@ function WordDetail({ word }: { word: WordEntry }) {
             </div>
           </div>
         ) : (
-          <p className="text-sm leading-relaxed">
-            {word.note
-              ? <span className="text-gray-700">{word.note}</span>
-              : <span className="text-gray-400 italic text-xs">なし</span>
-            }
-          </p>
+          <div className="space-y-2">
+            <p className="text-sm leading-relaxed">
+              {word.note
+                ? <span className="text-gray-700">{word.note}</span>
+                : <span className="text-gray-400 italic text-xs">なし</span>
+              }
+            </p>
+            {noteImages.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {noteImages.map((url, i) => (
+                  <img key={i} src={url} alt="" className="max-h-32 rounded-lg object-contain" />
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>

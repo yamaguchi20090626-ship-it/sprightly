@@ -8,8 +8,12 @@ import {
   FlatList,
   StyleSheet,
   Alert,
+  Image,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useWords, useWordDispatch } from '../../context/WordContext';
+import { useAuth } from '../../context/AuthContext';
+import { supabase } from '../../lib/supabase';
 import type { Status, WordEntry } from '../../types/word';
 
 async function translateToJapanese(text: string): Promise<string> {
@@ -44,8 +48,11 @@ const statusColor: Record<Status, { bg: string; text: string }> = {
 
 function WordDetail({ word }: { word: WordEntry }) {
   const dispatch = useWordDispatch();
+  const { user } = useAuth();
   const [note, setNote] = useState(word.note ?? '');
   const [editing, setEditing] = useState(false);
+  const [noteImages, setNoteImages] = useState<string[]>(word.noteImages ?? []);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [japaneseTexts, setJapaneseTexts] = useState<string[] | null>(null);
   const [loadingJa, setLoadingJa] = useState(false);
 
@@ -63,8 +70,31 @@ function WordDetail({ word }: { word: WordEntry }) {
     setLoadingJa(false);
   }
 
+  async function handlePickImage() {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) { Alert.alert('許可が必要です', '写真ライブラリへのアクセスを許可してください。'); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
+    if (result.canceled || !user) return;
+    setUploadingImage(true);
+    const uri = result.assets[0].uri;
+    const ext = uri.split('.').pop() ?? 'jpg';
+    const path = `${user.id}/${word.id}/${Date.now()}.${ext}`;
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    const { data } = await supabase.storage.from('note-images').upload(path, blob, { contentType: `image/${ext}` });
+    if (data) {
+      const { data: { publicUrl } } = supabase.storage.from('note-images').getPublicUrl(path);
+      setNoteImages((prev) => [...prev, publicUrl]);
+    }
+    setUploadingImage(false);
+  }
+
+  function removeImage(url: string) {
+    setNoteImages((prev) => prev.filter((u) => u !== url));
+  }
+
   function saveNote() {
-    dispatch({ type: 'UPDATE_NOTE', id: word.id, note: note.trim() });
+    dispatch({ type: 'UPDATE_NOTE', id: word.id, note: note.trim(), noteImages });
     setEditing(false);
   }
 
@@ -96,7 +126,7 @@ function WordDetail({ word }: { word: WordEntry }) {
           <Text style={styles.noteLabel}>メモ</Text>
           {!editing && (
             <TouchableOpacity onPress={() => setEditing(true)}>
-              <Text style={styles.noteEditBtn}>{word.note ? '編集' : '+ 追加'}</Text>
+              <Text style={styles.noteEditBtn}>{word.note || noteImages.length > 0 ? '編集' : '+ 追加'}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -111,19 +141,43 @@ function WordDetail({ word }: { word: WordEntry }) {
               multiline
               numberOfLines={2}
             />
+            {noteImages.length > 0 && (
+              <View style={styles.imageRow}>
+                {noteImages.map((url, i) => (
+                  <View key={i} style={styles.imageThumbWrap}>
+                    <Image source={{ uri: url }} style={styles.imageThumb} />
+                    <TouchableOpacity onPress={() => removeImage(url)} style={styles.removeImageBtn}>
+                      <Text style={styles.removeImageText}>×</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
+            <TouchableOpacity onPress={handlePickImage} disabled={uploadingImage}>
+              <Text style={styles.addImageBtn}>{uploadingImage ? 'アップロード中…' : '+ 画像を追加'}</Text>
+            </TouchableOpacity>
             <View style={styles.noteActions}>
               <TouchableOpacity onPress={saveNote} style={styles.saveBtnSmall}>
                 <Text style={styles.saveBtnText}>保存</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => { setNote(word.note ?? ''); setEditing(false); }}>
+              <TouchableOpacity onPress={() => { setNote(word.note ?? ''); setNoteImages(word.noteImages ?? []); setEditing(false); }}>
                 <Text style={styles.cancelText}>キャンセル</Text>
               </TouchableOpacity>
             </View>
           </View>
         ) : (
-          <Text style={word.note ? styles.noteContent : styles.noteEmpty}>
-            {word.note || 'なし'}
-          </Text>
+          <View style={{ gap: 6 }}>
+            <Text style={word.note ? styles.noteContent : styles.noteEmpty}>
+              {word.note || 'なし'}
+            </Text>
+            {noteImages.length > 0 && (
+              <View style={styles.imageRow}>
+                {noteImages.map((url, i) => (
+                  <Image key={i} source={{ uri: url }} style={styles.noteImageView} resizeMode="contain" />
+                ))}
+              </View>
+            )}
+          </View>
         )}
       </View>
     </View>
@@ -263,5 +317,12 @@ const styles = StyleSheet.create({
   cancelText: { color: '#6b7280', fontSize: 12 },
   noteContent: { fontSize: 14, color: '#374151', lineHeight: 20 },
   noteEmpty: { fontSize: 12, color: '#9ca3af', fontStyle: 'italic' },
+  imageRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
+  imageThumbWrap: { position: 'relative' },
+  imageThumb: { width: 64, height: 64, borderRadius: 8 },
+  removeImageBtn: { position: 'absolute', top: -6, right: -6, backgroundColor: '#ef4444', borderRadius: 10, width: 18, height: 18, alignItems: 'center', justifyContent: 'center' },
+  removeImageText: { color: '#fff', fontSize: 12, lineHeight: 18 },
+  addImageBtn: { fontSize: 12, color: '#6366f1', textDecorationLine: 'underline', marginTop: 2 },
+  noteImageView: { width: '100%', height: 140, borderRadius: 8 },
 });
 

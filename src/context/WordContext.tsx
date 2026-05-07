@@ -17,7 +17,7 @@ type Action =
   | { type: 'LOAD_WORDS'; words: WordEntry[] }
   | { type: 'ADD_WORD'; word: WordEntry }
   | { type: 'REVIEW_CARD'; id: string; rating: Rating }
-  | { type: 'UPDATE_NOTE'; id: string; note: string }
+  | { type: 'UPDATE_NOTE'; id: string; note: string; noteImages: string[] }
   | { type: 'DELETE_WORD'; id: string };
 
 function srsStateToStatus(srsState: 'new' | 'learning' | 'review'): Status {
@@ -56,7 +56,7 @@ function reducer(state: WordEntry[], action: Action): WordEntry[] {
       });
     }
     case 'UPDATE_NOTE':
-      return state.map((w) => w.id === action.id ? { ...w, note: action.note } : w);
+      return state.map((w) => w.id === action.id ? { ...w, note: action.note, noteImages: action.noteImages } : w);
     case 'DELETE_WORD':
       return state.filter((w) => w.id !== action.id);
   }
@@ -127,7 +127,7 @@ export function WordProvider({ children }: { children: ReactNode }) {
 
     if (action.type === 'UPDATE_NOTE') {
       dispatch(action);
-      supabase.from('words').update({ note: action.note }).eq('id', action.id).eq('user_id', user.id).then();
+      supabase.from('words').update({ note: action.note, note_images: action.noteImages }).eq('id', action.id).eq('user_id', user.id).then();
       return;
     }
 

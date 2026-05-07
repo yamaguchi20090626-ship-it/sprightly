@@ -183,10 +183,17 @@ export default function FlashCard({ word, onResult }: Props) {
                 </div>
               ))}
 
-              {word.note && (
+              {(word.note || (word.noteImages && word.noteImages.length > 0)) && (
                 <div className="pt-3 border-t border-indigo-200">
                   <p className="text-xs font-semibold text-indigo-600 mb-1">メモ</p>
-                  <p className="text-sm text-gray-800 leading-relaxed">{word.note}</p>
+                  {word.note && <p className="text-sm text-gray-800 leading-relaxed">{word.note}</p>}
+                  {word.noteImages && word.noteImages.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {word.noteImages.map((url, i) => (
+                        <img key={i} src={url} alt="" className="max-h-40 rounded-lg object-contain" />
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 

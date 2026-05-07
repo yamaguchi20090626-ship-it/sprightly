@@ -21,30 +21,32 @@ export default function StudyPage() {
   const words = useWords();
   const dispatch = useWordDispatch();
   const { newCardsPerDay } = useSettings();
-  const [current, setCurrent] = useState<WordEntry | null>(null);
+  const [currentId, setCurrentId] = useState<string | null>(null);
+  const current = currentId ? (words.find(w => w.id === currentId) ?? null) : null;
   const [sessionCount, setSessionCount] = useState(0);
   const [dailyNewCount, setDailyNewCount] = useState(() => getDailyNewCount());
   const [tick, setTick] = useState(0);
 
   const newLimitReached = dailyNewCount >= newCardsPerDay;
 
-  // Pick initial card when words load, or when current becomes null
   useEffect(() => {
-    if (words.length > 0 && current === null) {
-      setCurrent(pickNextWord(words, Date.now(), { skipNew: newLimitReached }));
+    if (words.length > 0 && currentId === null) {
+      const next = pickNextWord(words, Date.now(), { skipNew: newLimitReached });
+      setCurrentId(next?.id ?? null);
     }
-  }, [words, current, newLimitReached]);
+  }, [words, currentId, newLimitReached]);
 
   // Auto-refresh every 10 seconds so learning cards appear when they become due
   useEffect(() => {
-    if (current !== null) return;
+    if (currentId !== null) return;
     const id = setInterval(() => setTick((n) => n + 1), 10_000);
     return () => clearInterval(id);
-  }, [current]);
+  }, [currentId]);
 
   useEffect(() => {
-    if (current === null && words.length > 0) {
-      setCurrent(pickNextWord(words, Date.now(), { skipNew: newLimitReached }));
+    if (currentId === null && words.length > 0) {
+      const next = pickNextWord(words, Date.now(), { skipNew: newLimitReached });
+      setCurrentId(next?.id ?? null);
     }
   }, [tick]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -65,7 +67,7 @@ export default function StudyPage() {
       Date.now(),
       { skipNew: nextDailyCount >= newCardsPerDay },
     );
-    setCurrent(next);
+    setCurrentId(next?.id ?? null);
   }
 
   if (!words.length) {
@@ -98,7 +100,7 @@ export default function StudyPage() {
           <>
             <p className="text-slate-300 text-sm">次のカードは{countdown}届きます</p>
             <button
-              onClick={() => setCurrent(pickNextWord(words, Date.now(), { skipNew: newLimitReached }))}
+              onClick={() => setCurrentId(pickNextWord(words, Date.now(), { skipNew: newLimitReached })?.id ?? null)}
               className="mt-4 inline-block bg-indigo-600 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
             >
               今すぐ確認

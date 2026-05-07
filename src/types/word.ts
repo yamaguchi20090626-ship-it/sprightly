@@ -29,4 +29,5 @@ export interface WordEntry {
   srsDue?: number;
   srsStep?: number;
   note?: string;
+  noteImages?: string[];
 }

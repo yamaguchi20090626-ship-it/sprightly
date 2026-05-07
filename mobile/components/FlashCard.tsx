@@ -10,6 +10,7 @@ import {
   Pressable,
 } from 'react-native';
 import * as Speech from 'expo-speech';
+import { Image } from 'react-native';
 import type { WordEntry } from '../types/word';
 import { fetchExamples } from '../lib/api';
 import type { Rating } from '../lib/srs';
@@ -145,10 +146,13 @@ export default function FlashCard({ word, onResult }: Props) {
               </View>
             ))}
 
-            {word.note ? (
+            {(word.note || (word.noteImages && word.noteImages.length > 0)) ? (
               <View style={styles.noteBox}>
                 <Text style={styles.noteLabel}>メモ</Text>
-                <Text style={styles.noteText}>{word.note}</Text>
+                {word.note ? <Text style={styles.noteText}>{word.note}</Text> : null}
+                {word.noteImages?.map((url, i) => (
+                  <Image key={i} source={{ uri: url }} style={styles.noteImage} resizeMode="contain" />
+                ))}
               </View>
             ) : null}
 
@@ -260,6 +264,7 @@ const styles = StyleSheet.create({
   noteBox: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#c7d2fe' },
   noteLabel: { fontSize: 12, fontWeight: '600', color: '#6366f1', marginBottom: 4 },
   noteText: { fontSize: 14, color: '#1f2937', lineHeight: 20 },
+  noteImage: { width: '100%', height: 160, borderRadius: 8, marginTop: 8 },
   tatoebaBox: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#c7d2fe' },
   tatoebaLabel: { fontSize: 12, fontWeight: '600', color: '#d97706', marginBottom: 8 },
   tatoebaItem: { marginBottom: 8 },

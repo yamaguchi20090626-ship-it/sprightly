@@ -22,7 +22,8 @@ export default function StudyScreen() {
   const words = useWords();
   const dispatch = useWordDispatch();
   const { newCardsPerDay } = useSettings();
-  const [current, setCurrent] = useState<WordEntry | null>(null);
+  const [currentId, setCurrentId] = useState<string | null>(null);
+  const current = currentId ? (words.find(w => w.id === currentId) ?? null) : null;
   const [sessionCount, setSessionCount] = useState(0);
   const [dailyNewCount, setDailyNewCount] = useState(0);
   const [tick, setTick] = useState(0);
@@ -34,20 +35,22 @@ export default function StudyScreen() {
   const newLimitReached = dailyNewCount >= newCardsPerDay;
 
   useEffect(() => {
-    if (words.length > 0 && current === null) {
-      setCurrent(pickNextWord(words, Date.now(), { skipNew: newLimitReached }));
+    if (words.length > 0 && currentId === null) {
+      const next = pickNextWord(words, Date.now(), { skipNew: newLimitReached });
+      setCurrentId(next?.id ?? null);
     }
-  }, [words, current, newLimitReached]);
+  }, [words, currentId, newLimitReached]);
 
   useEffect(() => {
-    if (current !== null) return;
+    if (currentId !== null) return;
     const id = setInterval(() => setTick((n) => n + 1), 10_000);
     return () => clearInterval(id);
-  }, [current]);
+  }, [currentId]);
 
   useEffect(() => {
-    if (current === null && words.length > 0) {
-      setCurrent(pickNextWord(words, Date.now(), { skipNew: newLimitReached }));
+    if (currentId === null && words.length > 0) {
+      const next = pickNextWord(words, Date.now(), { skipNew: newLimitReached });
+      setCurrentId(next?.id ?? null);
     }
   }, [tick]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -68,7 +71,7 @@ export default function StudyScreen() {
       Date.now(),
       { skipNew: nextDailyCount >= newCardsPerDay },
     );
-    setCurrent(next);
+    setCurrentId(next?.id ?? null);
   }
 
   if (!words.length) {
@@ -99,7 +102,7 @@ export default function StudyScreen() {
           <>
             <Text style={styles.countdownText}>次のカードは{countdown}届きます</Text>
             <TouchableOpacity
-              onPress={() => setCurrent(pickNextWord(words, Date.now(), { skipNew: newLimitReached }))}
+              onPress={() => setCurrentId(pickNextWord(words, Date.now(), { skipNew: newLimitReached })?.id ?? null)}
               style={styles.actionBtn}
             >
               <Text style={styles.actionBtnText}>今すぐ確認</Text>
