@@ -76,7 +76,7 @@ export default function Paywall() {
 
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           <Text style={styles.crown}>👑</Text>
-          <Text style={styles.title}>Sprightly Premium</Text>
+          <Text style={styles.title}>WordPocket Premium</Text>
           <Text style={styles.subtitle}>英単語学習をもっと豊かに</Text>
 
           <View style={styles.benefitsList}>

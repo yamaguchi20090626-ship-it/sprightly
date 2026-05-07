@@ -9,10 +9,10 @@ import ClientLayout from '@/components/ClientLayout';
 const geist = Geist({ subsets: ['latin'], variable: '--font-geist-sans' });
 
 export const metadata: Metadata = {
-  title: 'Sprightly — 英単語フラッシュカード',
+  title: 'WordPocket — 英単語フラッシュカード',
   description: 'Ankiスタイルの間隔反復で英単語を効率的に記憶するWebアプリ',
   openGraph: {
-    title: 'Sprightly',
+    title: 'WordPocket',
     description: '英単語をスマートに暗記',
     type: 'website',
   },

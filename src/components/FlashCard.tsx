@@ -265,6 +265,7 @@ export default function FlashCard({ word, onResult }: Props) {
               onClick={() => handleResult('again')}
               className="flex flex-col items-center py-3 px-1 rounded-xl bg-red-100 text-red-700 font-semibold text-sm hover:bg-red-200 transition-colors"
             >
+              <span className="text-xl mb-0.5">😫</span>
               <span>Again</span>
               <span className="text-xs font-normal opacity-70">もう一度</span>
             </button>
@@ -272,6 +273,7 @@ export default function FlashCard({ word, onResult }: Props) {
               onClick={() => handleResult('hard')}
               className="flex flex-col items-center py-3 px-1 rounded-xl bg-orange-100 text-orange-700 font-semibold text-sm hover:bg-orange-200 transition-colors"
             >
+              <span className="text-xl mb-0.5">😕</span>
               <span>Hard</span>
               <span className="text-xs font-normal opacity-70">難しい</span>
             </button>
@@ -279,6 +281,7 @@ export default function FlashCard({ word, onResult }: Props) {
               onClick={() => handleResult('good')}
               className="flex flex-col items-center py-3 px-1 rounded-xl bg-blue-100 text-blue-700 font-semibold text-sm hover:bg-blue-200 transition-colors"
             >
+              <span className="text-xl mb-0.5">😊</span>
               <span>Good</span>
               <span className="text-xs font-normal opacity-70">正解</span>
             </button>
@@ -286,6 +289,7 @@ export default function FlashCard({ word, onResult }: Props) {
               onClick={() => handleResult('easy')}
               className="flex flex-col items-center py-3 px-1 rounded-xl bg-emerald-100 text-emerald-700 font-semibold text-sm hover:bg-emerald-200 transition-colors"
             >
+              <span className="text-xl mb-0.5">😄</span>
               <span>Easy</span>
               <span className="text-xs font-normal opacity-70">簡単</span>
             </button>

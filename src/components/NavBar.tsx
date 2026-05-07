@@ -68,7 +68,7 @@ export default function NavBar() {
   return (
     <nav className="sticky top-0 z-10" style={{ backgroundColor: 'var(--bg-nav)' }}>
       <div className="max-w-2xl mx-auto px-4 flex items-center gap-1 h-14">
-        <span className="font-bold text-sky-400 text-lg mr-6">Sprightly</span>
+        <span className="font-bold text-sky-400 text-lg mr-6">WordPocket</span>
         {links.map(({ href, label, icon }) => (
           <Link
             key={href}

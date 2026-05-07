@@ -43,7 +43,7 @@ export default function AuthScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView contentContainerStyle={styles.inner} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>Sprightly</Text>
+        <Text style={styles.title}>WordPocket</Text>
         <Text style={styles.subtitle}>
           {mode === 'login' ? 'アカウントにログイン' : '新規アカウント作成'}
         </Text>
