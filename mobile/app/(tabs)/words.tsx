@@ -35,6 +35,19 @@ async function translateToJapanese(text: string): Promise<string> {
   }
 }
 
+const POS_PRIORITY: Record<string, number> = {
+  verb: 0, noun: 1, adjective: 2, adverb: 3,
+  pronoun: 4, preposition: 5, conjunction: 6, interjection: 7, exclamation: 8,
+};
+
+function sortMeanings(meanings: WordEntry['meanings']) {
+  return [...meanings].sort((a, b) => {
+    const defDiff = b.definitions.length - a.definitions.length;
+    if (defDiff !== 0) return defDiff;
+    return (POS_PRIORITY[a.partOfSpeech] ?? 99) - (POS_PRIORITY[b.partOfSpeech] ?? 99);
+  });
+}
+
 const statusLabel: Record<Status, string> = {
   new: '未学習',
   learning: '学習中',
@@ -104,7 +117,7 @@ function WordDetail({ word }: { word: WordEntry }) {
   return (
     <View style={styles.detail}>
       {word.phonetic ? <Text style={styles.phonetic}>{word.phonetic}</Text> : null}
-      {word.meanings.map((m, i) => (
+      {sortMeanings(word.meanings).map((m, i) => (
         <View key={i} style={styles.meaningBlock}>
           <View style={styles.posTag}>
             <Text style={styles.posText}>{m.partOfSpeech}</Text>
@@ -193,14 +206,17 @@ export default function WordsScreen() {
   const words = useWords();
   const dispatch = useWordDispatch();
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortOrder, setSortOrder] = useState<'added' | 'az'>('added');
+  const [sortOrder, setSortOrder] = useState<'added' | 'az' | 'status'>('added');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const STATUS_PRIORITY: Record<Status, number> = { mastered: 0, learning: 1, new: 2 };
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     let result = q ? words.filter((w) => w.word.toLowerCase().includes(q)) : [...words];
     if (sortOrder === 'az') result.sort((a, b) => a.word.localeCompare(b.word));
-    else result.reverse();
+    else if (sortOrder === 'status') result.sort((a, b) => STATUS_PRIORITY[a.status] - STATUS_PRIORITY[b.status]);
+    else result = [...result].reverse();
     return result;
   }, [words, searchQuery, sortOrder]);
 
@@ -232,11 +248,11 @@ export default function WordsScreen() {
           autoCorrect={false}
         />
         <TouchableOpacity
-          onPress={() => setSortOrder((s) => (s === 'added' ? 'az' : 'added'))}
-          style={[styles.sortBtn, sortOrder === 'az' && styles.sortBtnActive]}
+          onPress={() => setSortOrder((s) => s === 'added' ? 'az' : s === 'az' ? 'status' : 'added')}
+          style={[styles.sortBtn, sortOrder !== 'added' && styles.sortBtnActive]}
         >
-          <Text style={[styles.sortBtnText, sortOrder === 'az' && styles.sortBtnTextActive]}>
-            {sortOrder === 'az' ? 'A→Z' : '追加順'}
+          <Text style={[styles.sortBtnText, sortOrder !== 'added' && styles.sortBtnTextActive]}>
+            {sortOrder === 'az' ? 'A→Z' : sortOrder === 'status' ? '習得度' : '追加順'}
           </Text>
         </TouchableOpacity>
       </View>

@@ -1,4 +1,4 @@
-﻿// @ts-nocheck
+// @ts-nocheck
 import { useState, useRef } from 'react';
 import {
   View,
@@ -10,11 +10,24 @@ import {
   Pressable,
 } from 'react-native';
 import * as Speech from 'expo-speech';
-import { Image, Alert } from 'react-native';
-import type { WordEntry } from '../types/word';
+import { Image } from 'react-native';
+import type { WordEntry, Meaning } from '../types/word';
 import { fetchExamples } from '../lib/api';
 import type { Rating } from '../lib/srs';
 import { useSubscription } from '../context/SubscriptionContext';
+
+const POS_PRIORITY: Record<string, number> = {
+  verb: 0, noun: 1, adjective: 2, adverb: 3,
+  pronoun: 4, preposition: 5, conjunction: 6, interjection: 7, exclamation: 8,
+};
+
+function sortMeanings(meanings: Meaning[]): Meaning[] {
+  return [...meanings].sort((a, b) => {
+    const defDiff = b.definitions.length - a.definitions.length;
+    if (defDiff !== 0) return defDiff;
+    return (POS_PRIORITY[a.partOfSpeech] ?? 99) - (POS_PRIORITY[b.partOfSpeech] ?? 99);
+  });
+}
 
 async function translateToJapanese(text: string): Promise<string> {
   try {
@@ -43,6 +56,17 @@ interface Props {
   onResult: (rating: Rating) => void;
 }
 
+const STATUS_LABEL = { new: 'New', learning: '学習中', mastered: '習得済み' };
+const STATUS_BG    = { new: '#dbeafe', learning: '#fef9c3', mastered: '#dcfce7' };
+const STATUS_COLOR = { new: '#1d4ed8', learning: '#a16207', mastered: '#15803d' };
+
+const RATINGS = [
+  { rating: 'again', label: 'Again', sub: 'もう一度', emoji: '😫', bg: '#fee2e2', color: '#b91c1c' },
+  { rating: 'hard',  label: 'Hard',  sub: '難しい',   emoji: '😕', bg: '#ffedd5', color: '#c2410c' },
+  { rating: 'good',  label: 'Good',  sub: '正解',     emoji: '😊', bg: '#dbeafe', color: '#1d4ed8' },
+  { rating: 'easy',  label: 'Easy',  sub: '簡単',     emoji: '😄', bg: '#d1fae5', color: '#065f46' },
+] as const;
+
 export default function FlashCard({ word, onResult }: Props) {
   const { isPremium, setShowPaywall } = useSubscription();
   const [flipped, setFlipped] = useState(false);
@@ -62,7 +86,7 @@ export default function FlashCard({ word, onResult }: Props) {
   }
 
   const frontOpacity = flipAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 0, 0] });
-  const backOpacity = flipAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 0, 1] });
+  const backOpacity  = flipAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 0, 1] });
 
   async function handleToggleJapanese() {
     if (japaneseTexts !== null) { setJapaneseTexts(null); return; }
@@ -79,11 +103,7 @@ export default function FlashCard({ word, onResult }: Props) {
   }
 
   async function handleToggleTatoeba() {
-    if (tatoebaExamples !== null) {
-      setTatoebaExamples(null);
-      setTatoebaJaTexts(null);
-      return;
-    }
+    if (tatoebaExamples !== null) { setTatoebaExamples(null); setTatoebaJaTexts(null); return; }
     setLoadingTatoeba(true);
     const examples = await fetchExamples(word.word);
     setTatoebaExamples(examples);
@@ -108,12 +128,19 @@ export default function FlashCard({ word, onResult }: Props) {
     onResult(rating);
   }
 
+  const sorted = sortMeanings(word.meanings);
+
   return (
     <View style={styles.container}>
       {/* Card */}
       <Pressable onPress={handleFlip} style={styles.cardWrapper}>
         {/* Front */}
         <Animated.View style={[styles.card, styles.cardFront, { opacity: frontOpacity }]}>
+          <View style={styles.statusBadge}>
+            <Text style={[styles.statusText, { color: STATUS_COLOR[word.status] }]}>
+              {STATUS_LABEL[word.status]}
+            </Text>
+          </View>
           <Text style={styles.wordText}>{word.word}</Text>
           {word.phonetic && <Text style={styles.phoneticText}>{word.phonetic}</Text>}
           <TouchableOpacity
@@ -126,9 +153,9 @@ export default function FlashCard({ word, onResult }: Props) {
         </Animated.View>
 
         {/* Back */}
-        <Animated.View style={[styles.card, styles.cardBack, { opacity: backOpacity, position: 'absolute', top: 0, left: 0, right: 0 }]}>
+        <Animated.View style={[styles.card, styles.cardBack, { opacity: backOpacity, position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }]}>
           <ScrollView showsVerticalScrollIndicator={false}>
-            {word.meanings.map((m, i) => (
+            {sorted.map((m, i) => (
               <View key={i} style={styles.meaningBlock}>
                 <View style={styles.posTag}>
                   <Text style={styles.posText}>{m.partOfSpeech}</Text>
@@ -186,6 +213,7 @@ export default function FlashCard({ word, onResult }: Props) {
                 )}
               </View>
             )}
+            <View style={{ height: 16 }} />
           </ScrollView>
         </Animated.View>
       </Pressable>
@@ -214,17 +242,13 @@ export default function FlashCard({ word, onResult }: Props) {
           </View>
 
           <View style={styles.ratingRow}>
-            {([
-              { rating: 'again', label: 'Again', sub: 'もう一度', bg: '#fee2e2', color: '#b91c1c' },
-              { rating: 'hard', label: 'Hard', sub: '難しい', bg: '#ffedd5', color: '#c2410c' },
-              { rating: 'good', label: 'Good', sub: '正解', bg: '#dbeafe', color: '#1d4ed8' },
-              { rating: 'easy', label: 'Easy', sub: '簡単', bg: '#d1fae5', color: '#065f46' },
-            ] as const).map(({ rating, label, sub, bg, color }) => (
+            {RATINGS.map(({ rating, label, sub, emoji, bg, color }) => (
               <TouchableOpacity
                 key={rating}
                 onPress={() => handleResult(rating)}
                 style={[styles.ratingBtn, { backgroundColor: bg }]}
               >
+                <Text style={styles.ratingEmoji}>{emoji}</Text>
                 <Text style={[styles.ratingLabel, { color }]}>{label}</Text>
                 <Text style={[styles.ratingSub, { color }]}>{sub}</Text>
               </TouchableOpacity>
@@ -237,13 +261,13 @@ export default function FlashCard({ word, onResult }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, gap: 20 },
-  cardWrapper: { minHeight: 280 },
+  container: { flex: 1, gap: 16 },
+  cardWrapper: { flex: 1, minHeight: 280 },
   card: {
     backgroundColor: '#fff',
     borderRadius: 20,
     padding: 24,
-    minHeight: 280,
+    flex: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
@@ -260,6 +284,16 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'flex-start',
   },
+  statusBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: '#dbeafe',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  statusText: { fontSize: 11, fontWeight: '600' },
   wordText: { fontSize: 36, fontWeight: 'bold', color: '#111827' },
   phoneticText: { fontSize: 18, color: '#6b7280', marginTop: 8 },
   speakerBtn: { marginTop: 20, padding: 10, backgroundColor: '#f3f4f6', borderRadius: 999 },
@@ -293,8 +327,8 @@ const styles = StyleSheet.create({
   linkText: { fontSize: 14, color: '#a5b4fc', textDecorationLine: 'underline' },
   amberLink: { color: '#fcd34d' },
   ratingRow: { flexDirection: 'row', gap: 8 },
-  ratingBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 12 },
-  ratingLabel: { fontSize: 14, fontWeight: '600' },
-  ratingSub: { fontSize: 11, opacity: 0.7, marginTop: 2 },
+  ratingBtn: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 12 },
+  ratingEmoji: { fontSize: 20, marginBottom: 2 },
+  ratingLabel: { fontSize: 13, fontWeight: '600' },
+  ratingSub: { fontSize: 10, opacity: 0.7, marginTop: 1 },
 });
-
