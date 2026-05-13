@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useAuth } from '../../context/AuthContext';
 
 export default function AuthPage() {
@@ -83,6 +84,12 @@ export default function AuthPage() {
         >
           {mode === 'login' ? 'アカウントをお持ちでない方はこちら' : 'すでにアカウントをお持ちの方はこちら'}
         </button>
+
+        <p className="mt-6 text-center text-xs text-gray-400">
+          アカウントを作成することで
+          <Link href="/privacy" className="text-indigo-500 hover:underline mx-1">プライバシーポリシー</Link>
+          に同意したものとみなされます。
+        </p>
       </div>
     </div>
   );
