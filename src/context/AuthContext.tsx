@@ -9,6 +9,7 @@ interface AuthContextType {
   signUp: (email: string, password: string) => Promise<string | null>;
   signIn: (email: string, password: string) => Promise<string | null>;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<string | null>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -17,6 +18,7 @@ const AuthContext = createContext<AuthContextType>({
   signUp: async () => null,
   signIn: async () => null,
   signOut: async () => {},
+  deleteAccount: async () => null,
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -48,8 +50,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
   }
 
+  async function deleteAccount(): Promise<string | null> {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return 'ログインが必要です';
+
+    const res = await fetch('/api/delete-account', {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return body.error ?? '削除に失敗しました';
+    }
+    await supabase.auth.signOut();
+    return null;
+  }
+
   return (
-    <AuthContext.Provider value={{ user, loading, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, loading, signUp, signIn, signOut, deleteAccount }}>
       {children}
     </AuthContext.Provider>
   );

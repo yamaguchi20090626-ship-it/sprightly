@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSettings, useSettingsDispatch, type FontSize } from '@/context/SettingsContext';
 import { useAuth } from '@/context/AuthContext';
@@ -14,13 +15,28 @@ const fontSizes: Array<{ value: FontSize; label: string }> = [
 export default function SettingsPage() {
   const settings = useSettings();
   const dispatch = useSettingsDispatch();
-  const { signOut } = useAuth();
+  const { signOut, deleteAccount } = useAuth();
   const router = useRouter();
   const todayNewCount = getDailyNewCount();
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   async function handleSignOut() {
     await signOut();
     router.push('/auth');
+  }
+
+  async function handleDeleteAccount() {
+    setDeleting(true);
+    setDeleteError('');
+    const error = await deleteAccount();
+    setDeleting(false);
+    if (error) {
+      setDeleteError(error);
+    } else {
+      router.push('/auth');
+    }
   }
 
   return (
@@ -90,12 +106,48 @@ export default function SettingsPage() {
         <p className="text-xs text-gray-600">現在: <span className="font-semibold text-gray-900">{fontSizes.find(f => f.value === settings.fontSize)?.label}</span></p>
       </div>
 
-      <button
-        onClick={handleSignOut}
-        className="mx-auto block text-sm text-gray-400 hover:text-gray-600 transition-colors py-1"
-      >
-        ログアウト
-      </button>
+      <div className="flex flex-col items-center gap-3">
+        <button
+          onClick={handleSignOut}
+          className="text-sm text-gray-400 hover:text-gray-600 transition-colors py-1"
+        >
+          ログアウト
+        </button>
+
+        {!showDeleteConfirm ? (
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="text-sm text-red-400 hover:text-red-600 transition-colors py-1"
+          >
+            アカウントを削除
+          </button>
+        ) : (
+          <div className="w-full bg-red-50 border border-red-200 rounded-xl p-5 space-y-3">
+            <p className="text-sm font-semibold text-red-700">本当に削除しますか？</p>
+            <p className="text-xs text-red-600">
+              アカウントと登録済みのすべての単語が完全に削除されます。この操作は取り消せません。
+            </p>
+            {deleteError && (
+              <p className="text-xs text-red-700 font-medium">{deleteError}</p>
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={handleDeleteAccount}
+                disabled={deleting}
+                className="flex-1 bg-red-600 text-white rounded-lg py-2 text-sm font-semibold hover:bg-red-700 disabled:opacity-50 transition-colors"
+              >
+                {deleting ? '削除中…' : '削除する'}
+              </button>
+              <button
+                onClick={() => { setShowDeleteConfirm(false); setDeleteError(''); }}
+                className="flex-1 bg-gray-100 text-gray-700 rounded-lg py-2 text-sm font-semibold hover:bg-gray-200 transition-colors"
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
