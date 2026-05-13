@@ -2,7 +2,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import Purchases, { LOG_LEVEL } from 'react-native-purchases';
 
-const REVENUECAT_IOS_KEY = 'REVENUECAT_IOS_KEY_PLACEHOLDER';
+const REVENUECAT_IOS_KEY = 'appl_zlUegbbvyGZTwuwbSvIoDhrEKsH';
 
 interface SubscriptionContextType {
   isPremium: boolean;
