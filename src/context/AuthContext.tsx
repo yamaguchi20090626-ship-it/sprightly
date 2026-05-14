@@ -21,6 +21,8 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<string | null>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<string | null>;
+  sendResetEmail: (email: string) => Promise<string | null>;
+  updatePassword: (password: string) => Promise<string | null>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -30,6 +32,8 @@ const AuthContext = createContext<AuthContextType>({
   signIn: async () => null,
   signOut: async () => {},
   deleteAccount: async () => null,
+  sendResetEmail: async () => null,
+  updatePassword: async () => null,
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -61,6 +65,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
   }
 
+  async function sendResetEmail(email: string): Promise<string | null> {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${location.origin}/reset-password`,
+    });
+    return error ? translateAuthError(error.message) : null;
+  }
+
+  async function updatePassword(password: string): Promise<string | null> {
+    const { error } = await supabase.auth.updateUser({ password });
+    return error ? translateAuthError(error.message) : null;
+  }
+
   async function deleteAccount(): Promise<string | null> {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return 'ログインが必要です';
@@ -78,7 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, signUp, signIn, signOut, deleteAccount }}>
+    <AuthContext.Provider value={{ user, loading, signUp, signIn, signOut, deleteAccount, sendResetEmail, updatePassword }}>
       {children}
     </AuthContext.Provider>
   );

@@ -5,20 +5,38 @@ import Link from 'next/link';
 import { useAuth } from '../../context/AuthContext';
 
 export default function AuthPage() {
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
+  const [mode, setMode] = useState<'login' | 'signup' | 'reset'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, sendResetEmail } = useAuth();
   const router = useRouter();
+
+  function switchMode(next: 'login' | 'signup' | 'reset') {
+    setMode(next);
+    setError('');
+    setMessage('');
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
     setMessage('');
     setLoading(true);
+
+    if (mode === 'reset') {
+      const errMsg = await sendResetEmail(email);
+      setLoading(false);
+      if (errMsg) {
+        setError(errMsg);
+      } else {
+        setMessage('パスワードリセット用のメールを送信しました。メールをご確認ください。');
+      }
+      return;
+    }
+
     const errMsg = mode === 'login'
       ? await signIn(email, password)
       : await signUp(email, password);
@@ -37,7 +55,7 @@ export default function AuthPage() {
       <div className="bg-white rounded-2xl p-8 w-full max-w-md shadow-lg">
         <h1 className="text-2xl font-bold text-gray-900 mb-1 text-center">Sprightly</h1>
         <p className="text-gray-500 text-center mb-8 text-sm">
-          {mode === 'login' ? 'アカウントにログイン' : '新規アカウント作成'}
+          {mode === 'login' ? 'アカウントにログイン' : mode === 'signup' ? '新規アカウント作成' : 'パスワードをリセット'}
         </p>
 
         {message && (
@@ -58,32 +76,50 @@ export default function AuthPage() {
               className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">パスワード（6文字以上）</label>
-            <input
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-              minLength={6}
-              className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
+          {mode !== 'reset' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">パスワード（6文字以上）</label>
+              <input
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+                minLength={6}
+                className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          )}
           <button
             type="submit"
             disabled={loading}
             className="w-full bg-indigo-600 text-white rounded-lg py-2.5 font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors"
           >
-            {loading ? '処理中…' : mode === 'login' ? 'ログイン' : 'アカウント作成'}
+            {loading ? '処理中…' : mode === 'login' ? 'ログイン' : mode === 'signup' ? 'アカウント作成' : 'リセットメールを送信'}
           </button>
         </form>
 
-        <button
-          onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setError(''); setMessage(''); }}
-          className="mt-6 w-full text-center text-sm text-indigo-600 hover:underline"
-        >
-          {mode === 'login' ? 'アカウントをお持ちでない方はこちら' : 'すでにアカウントをお持ちの方はこちら'}
-        </button>
+        <div className="mt-6 flex flex-col items-center gap-2">
+          {mode === 'login' && (
+            <>
+              <button onClick={() => switchMode('signup')} className="text-sm text-indigo-600 hover:underline">
+                アカウントをお持ちでない方はこちら
+              </button>
+              <button onClick={() => switchMode('reset')} className="text-sm text-gray-400 hover:text-gray-600">
+                パスワードをお忘れの方
+              </button>
+            </>
+          )}
+          {mode === 'signup' && (
+            <button onClick={() => switchMode('login')} className="text-sm text-indigo-600 hover:underline">
+              すでにアカウントをお持ちの方はこちら
+            </button>
+          )}
+          {mode === 'reset' && (
+            <button onClick={() => switchMode('login')} className="text-sm text-indigo-600 hover:underline">
+              ログインに戻る
+            </button>
+          )}
+        </div>
 
         <p className="mt-6 text-center text-xs text-gray-400">
           アカウントを作成することで

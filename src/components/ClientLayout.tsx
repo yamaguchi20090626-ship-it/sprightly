@@ -12,7 +12,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     if (loading) return;
-    if (!user && pathname !== '/auth' && pathname !== '/privacy') {
+    if (!user && pathname !== '/auth' && pathname !== '/privacy' && pathname !== '/reset-password') {
       router.replace('/auth');
     }
     if (user && pathname === '/auth') {
