@@ -3,6 +3,17 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 
+function translateAuthError(msg: string): string {
+  if (msg.includes('Invalid login credentials')) return 'メールアドレスまたはパスワードが正しくありません';
+  if (msg.includes('Email not confirmed')) return 'メールアドレスの確認が完了していません。確認メールをご確認ください';
+  if (msg.includes('User already registered')) return 'このメールアドレスはすでに登録されています';
+  if (msg.includes('Password should be at least')) return 'パスワードは6文字以上で入力してください';
+  if (msg.includes('Unable to validate email address')) return 'メールアドレスの形式が正しくありません';
+  if (msg.includes('Email rate limit exceeded')) return 'しばらく時間をおいてから再試行してください';
+  if (msg.includes('over_email_send_rate_limit')) return 'しばらく時間をおいてから再試行してください';
+  return 'エラーが発生しました。もう一度お試しください';
+}
+
 interface AuthContextType {
   user: User | null;
   loading: boolean;
@@ -38,12 +49,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signUp(email: string, password: string): Promise<string | null> {
     const { error } = await supabase.auth.signUp({ email, password });
-    return error?.message ?? null;
+    return error ? translateAuthError(error.message) : null;
   }
 
   async function signIn(email: string, password: string): Promise<string | null> {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return error?.message ?? null;
+    return error ? translateAuthError(error.message) : null;
   }
 
   async function signOut() {
